@@ -40,7 +40,7 @@
 <body>
 <main class="mx-auto max-w-6xl p-3 md:p-8">
   <header class="mb-5 flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
-    <div><h1 class="text-2xl md:text-4xl font-bold text-slate-800">Service Report</h1><p class="font-medium text-slate-500">Airnovation Engineering Pte Ltd Â· Browser-only test</p></div>
+    <div><h1 class="text-2xl md:text-4xl font-bold text-slate-800">Service Report</h1><p class="font-medium text-slate-500">Airnovation Engineering Pte Ltd · Browser-only test</p></div>
     <div id="auth-state" class="text-sm font-semibold text-slate-500"></div>
   </header>
   <section class="rounded-xl bg-white p-2 shadow-lg shadow-slate-200/70">
@@ -60,7 +60,7 @@ let currentTab="form", reports=loadReports(), signaturePad=null;
 const view=document.getElementById("view"), appNav=document.getElementById("app-nav"), authState=document.getElementById("auth-state");
 const channel="BroadcastChannel" in window ? new BroadcastChannel("airnovation-service-report-test") : null;
 
-authState.textContent="Local Test Mode Â· No Firebase Â· No login";
+authState.textContent="Local Test Mode · No Firebase · No login";
 appNav.classList.remove("hidden"); appNav.classList.add("flex");
 channel?.addEventListener("message",()=>{ reports=loadReports(); render(); });
 window.addEventListener("storage",e=>{ if(e.key===STORAGE_KEY){ reports=loadReports(); render(); } });
@@ -159,7 +159,7 @@ function buildPrintableReport(r){
     : `<tr><td colspan="5" style="height:34px"></td></tr>`;
   const t=r.totals||{};
   return `<div class="pdf-sheet">
-    <div class="pdf-head"><div><h1><span>AIR</span>NOVATION</h1><b>ENGINEERING PTE LTD</b><p>48 Toh Guan Road East #07-112 Enterprise Hub Singapore 608586<br>contact@airnovation.com.sg Â· 6515 4665</p></div><div class="meta"><b>${escapeHtml(r.reportNo||"")}</b><p>Date: ${escapeHtml(r.serviceDate||"")}<br>Technician: ${escapeHtml(r.technician||"")}<br>Time: ${escapeHtml(r.timeIn||"")} to ${escapeHtml(r.timeOut||"")}</p></div></div>
+    <div class="pdf-head"><div><h1><span>AIR</span>NOVATION</h1><b>ENGINEERING PTE LTD</b><p>48 Toh Guan Road East #07-112 Enterprise Hub Singapore 608586<br>contact@airnovation.com.sg · 6515 4665</p></div><div class="meta"><b>${escapeHtml(r.reportNo||"")}</b><p>Date: ${escapeHtml(r.serviceDate||"")}<br>Technician: ${escapeHtml(r.technician||"")}<br>Time: ${escapeHtml(r.timeIn||"")} to ${escapeHtml(r.timeOut||"")}</p></div></div>
     <h2>SERVICE REPORT</h2>
     <table><tr><th>Client</th><td>${escapeHtml(r.client||"")}</td><th>Email</th><td>${escapeHtml(r.customerEmail||"")}</td></tr><tr><th>Address</th><td colspan="3">${escapeHtml(r.address||"")}</td></tr><tr><th>Brand / Model</th><td>${escapeHtml([r.brand,r.model].filter(Boolean).join(" / "))}</td><th>Serial / Ref.</th><td>${escapeHtml([r.serialNo,r.referenceNo].filter(Boolean).join(" / "))}</td></tr></table>
     <h2>SECTION A</h2>
@@ -168,7 +168,7 @@ function buildPrintableReport(r){
     <table><thead><tr><th>Description</th><th>Qty</th><th>Unit</th><th>Unit Price</th><th>Amount</th></tr></thead><tbody>${itemRows}</tbody></table>
     <div class="totals"><p>Parts: <b>${money(t.parts)}</b></p><p>Labour: <b>${money(t.labour)}</b></p><p>Transport: <b>${money(t.transport)}</b></p><p>GST: <b>${money(t.gst)}</b></p><p>Total: <b>${money(t.total)}</b></p></div>
     <div class="sign"><div><b>Customer Name:</b> ${escapeHtml(r.customerName||"")}<br><b>Designation:</b> ${escapeHtml(r.designation||"")}</div><div><b>Customer Signature</b>${r.signatureData?`<img src="${r.signatureData}" alt="Signature">`:""}</div></div>
-    <p class="foot">Submitted: ${formatTime(r.timestamp)} Â· Status: ${statusLabel(r.status)}</p>
+    <p class="foot">Submitted: ${formatTime(r.timestamp)} · Status: ${statusLabel(r.status)}</p>
   </div>`;
 }
 function pdfStyles(){return `<style>
@@ -193,7 +193,7 @@ function reportCard(r,admin){
   const el=document.createElement("article");
   const status=normalizeStatus(r.status);
   el.className="card border-l-4 border-l-blue-500 p-4";
-  el.innerHTML=`<div class="flex flex-col gap-3 sm:flex-row sm:justify-between"><div><h3 class="font-bold text-slate-800">${escapeHtml(r.reportNo||"Service Report")}</h3><p class="text-sm text-slate-600">${escapeHtml(r.client||"")} Â· ${escapeHtml(r.technician||"")}</p><p class="text-xs text-slate-400">Submitted ${formatTime(r.timestamp)}</p></div><div class="sm:text-right"><span class="badge ${statusClass(status)}">${statusLabel(status)}</span><div class="mt-3 flex flex-wrap gap-2 sm:justify-end"><button class="printPdf btn bg-slate-200 px-3 py-2 text-slate-700" type="button">Print</button><button class="downloadPdf btn btn-primary px-3 py-2" type="button">Download PDF</button></div></div></div>${admin?adminPanel(r):""}`;
+  el.innerHTML=`<div class="flex flex-col gap-3 sm:flex-row sm:justify-between"><div><h3 class="font-bold text-slate-800">${escapeHtml(r.reportNo||"Service Report")}</h3><p class="text-sm text-slate-600">${escapeHtml(r.client||"")} · ${escapeHtml(r.technician||"")}</p><p class="text-xs text-slate-400">Submitted ${formatTime(r.timestamp)}</p></div><div class="sm:text-right"><span class="badge ${statusClass(status)}">${statusLabel(status)}</span><div class="mt-3 flex flex-wrap gap-2 sm:justify-end"><button class="printPdf btn bg-slate-200 px-3 py-2 text-slate-700" type="button">Print</button><button class="downloadPdf btn btn-primary px-3 py-2" type="button">Download PDF</button></div></div></div>${admin?adminPanel(r):""}`;
   el.querySelector(".downloadPdf").onclick=()=>downloadReportPdf(r);
   el.querySelector(".printPdf").onclick=()=>printReport(r);
   if(admin){el.querySelector(".saveAdmin").onclick=()=>saveAdmin(r.id,el);el.querySelector(".deleteReport").onclick=()=>deleteReport(r);}
@@ -222,4 +222,3 @@ render();
 </script>
 </body>
 </html>
-
