@@ -40,7 +40,7 @@
 <body>
 <main class="mx-auto max-w-6xl p-3 md:p-8">
   <header class="mb-5 flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
-    <div><h1 class="text-2xl md:text-4xl font-bold text-slate-800">Service Report</h1><p class="font-medium text-slate-500">Airnovation Engineering Pte Ltd · Browser-only test</p></div>
+    <div><h1 class="text-2xl md:text-4xl font-bold text-slate-800">Service Report</h1><p class="font-medium text-slate-500">Airnovation Engineering Pte Ltd · Secure shared workflow</p></div>
     <div id="auth-state" class="text-sm font-semibold text-slate-500"></div>
   </header>
   <section class="rounded-xl bg-white p-2 shadow-lg shadow-slate-200/70">
@@ -54,19 +54,59 @@
 </main>
 <div id="notice" class="fixed inset-0 z-50 hidden items-center justify-center bg-black/60 p-4"><div class="card w-full max-w-md p-6"><p id="notice-text" class="whitespace-pre-line text-base font-semibold text-slate-800"></p><button class="btn btn-primary mt-5 w-full" onclick="closeNotice()">OK</button></div></div>
 
-<script>
-const STORAGE_KEY="airnovation_service_report_test_v1";
-let currentTab="form", reports=loadReports(), signaturePad=null;
-const view=document.getElementById("view"), appNav=document.getElementById("app-nav"), authState=document.getElementById("auth-state");
-const channel="BroadcastChannel" in window ? new BroadcastChannel("airnovation-service-report-test") : null;
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+import { getAuth, onAuthStateChanged, signInWithEmailAndPassword, signOut } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+import { getFirestore, collection, addDoc, query, onSnapshot, serverTimestamp, doc, deleteDoc, updateDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
-authState.textContent="Local Test Mode · No Firebase · No login";
-appNav.classList.remove("hidden"); appNav.classList.add("flex");
-channel?.addEventListener("message",()=>{ reports=loadReports(); render(); });
-window.addEventListener("storage",e=>{ if(e.key===STORAGE_KEY){ reports=loadReports(); render(); } });
-function loadReports(){ try{return JSON.parse(localStorage.getItem(STORAGE_KEY)||"[]");}catch{return [];} }
-function saveReports(){ localStorage.setItem(STORAGE_KEY,JSON.stringify(reports)); channel?.postMessage("updated"); }
-function makeId(){ return crypto.randomUUID?.() || `local-${Date.now()}-${Math.random().toString(16).slice(2)}`; }
+const firebaseConfig={
+  apiKey:"AIzaSyBZ0-KPzLs13U7uG0KIqiYbKdbOBqVT7cQ",
+  authDomain:"airnovation-inventory.firebaseapp.com",
+  projectId:"airnovation-inventory",
+  storageBucket:"airnovation-inventory.firebasestorage.app",
+  messagingSenderId:"273073947687",
+  appId:"1:273073947687:web:2bd59cddbf675526747a02",
+  measurementId:"G-MV1LH9X1DD"
+};
+const DATA_ROOT="artifacts/service-report-app/public/data";
+const REPORTS_PATH=`${DATA_ROOT}/service_reports`;
+const ADMIN_NAMES={
+  "may@airnovation.com.sg":"May",
+  "aepl01@airnovation.com.sg":"HuiXin",
+  "nickylee@airnovation.com.sg":"Nicky",
+  "cpchong@airnovation.com.sg":"Emil",
+  "winnielim@airnovation.com.sg":"Winnie",
+  "maintenance@airnovation.com.sg":"Max"
+};
+const STAFF_EMAILS=new Set(["aepl.airnovation@gmail.com"]);
+const app=initializeApp(firebaseConfig), auth=getAuth(app), db=getFirestore(app);
+let currentTab="form", reports=[], signaturePad=null, userId=null, userEmail="", isAdmin=false, unsubscribeReports=null, reportsSnapshotReady=false, notificationAudio=null;
+const view=document.getElementById("view"), appNav=document.getElementById("app-nav"), authState=document.getElementById("auth-state"), adminTab=document.querySelector('[data-tab="admin"]');
+
+document.addEventListener("click",unlockNotificationSound,{once:true});
+onAuthStateChanged(auth,async user=>{
+  stopReportsSnapshot();
+  if(!user){
+    userId=null;userEmail="";isAdmin=false;reports=[];authState.textContent="";appNav.classList.add("hidden");adminTab.classList.add("hidden");renderLogin();return;
+  }
+  const email=(user.email||"").toLowerCase();
+  if(!isAllowedUser(email)){await signOut(auth);showNotice("This account is not authorized to use the Service Report application.");return;}
+  userId=user.uid;userEmail=email;isAdmin=Object.hasOwn(ADMIN_NAMES,email);
+  authState.innerHTML=`<span>${isAdmin?`Admin: ${escapeHtml(ADMIN_NAMES[email])}`:`Technician: ${escapeHtml(email)}`}</span><button id="app-logout" class="ml-3 font-bold text-blue-600" type="button">Logout</button>`;
+  document.getElementById("app-logout").onclick=logoutUser;
+  appNav.classList.remove("hidden");appNav.classList.add("flex");adminTab.classList.toggle("hidden",!isAdmin);
+  if(!isAdmin&&currentTab==="admin") setTab("form");
+  startReportsSnapshot();render();
+});
+function isAllowedUser(email){return Object.hasOwn(ADMIN_NAMES,email)||STAFF_EMAILS.has(email);}
+function renderLogin(){view.innerHTML=`<form id="user-login" class="mx-auto max-w-sm space-y-4 py-10"><h2 class="text-xl font-bold text-slate-800">Service Report Login</h2><input id="user-email" type="email" required autocomplete="username" class="field" placeholder="Email"><input id="user-password" type="password" required autocomplete="current-password" class="field" placeholder="Password"><p id="user-login-error" class="hidden text-sm font-semibold text-red-600"></p><button class="btn btn-primary w-full" type="submit">Login</button></form>`;document.getElementById("user-login").onsubmit=userLogin;}
+async function userLogin(e){e.preventDefault();const error=document.getElementById("user-login-error");try{const email=document.getElementById("user-email").value.trim().toLowerCase();if(!isAllowedUser(email))throw new Error("This email is not authorized.");await signInWithEmailAndPassword(auth,email,document.getElementById("user-password").value);}catch(err){console.error(err);error.textContent="Login failed: "+formatError(err);error.classList.remove("hidden");}}
+async function logoutUser(){await signOut(auth).catch(err=>showNotice("Logout failed: "+formatError(err)));currentTab="form";document.querySelectorAll(".tab").forEach(b=>b.classList.toggle("active",b.dataset.tab==="form"));}
+function startReportsSnapshot(){reportsSnapshotReady=false;unsubscribeReports=onSnapshot(query(collection(db,REPORTS_PATH)),snap=>{if(reportsSnapshotReady&&isAdmin&&snap.docChanges().some(change=>change.type==="added")){playNotificationSound();showToast("New service report received.");}reportsSnapshotReady=true;reports=snap.docs.map(d=>({id:d.id,...d.data()}));render();},err=>showNotice("Cannot load service reports: "+formatError(err)));}
+function stopReportsSnapshot(){unsubscribeReports?.();unsubscribeReports=null;reportsSnapshotReady=false;}
+function unlockNotificationSound(){try{const AudioContext=window.AudioContext||window.webkitAudioContext;if(!AudioContext)return;notificationAudio||=new AudioContext();if(notificationAudio.state==="suspended")notificationAudio.resume();}catch(err){console.warn("Notification sound could not be enabled.",err);}}
+function playNotificationSound(){try{unlockNotificationSound();if(!notificationAudio||notificationAudio.state!=="running")return;const now=notificationAudio.currentTime;[880,1175].forEach((frequency,index)=>{const oscillator=notificationAudio.createOscillator(),gain=notificationAudio.createGain(),start=now+index*.12;oscillator.type="sine";oscillator.frequency.setValueAtTime(frequency,start);gain.gain.setValueAtTime(.0001,start);gain.gain.exponentialRampToValueAtTime(.18,start+.02);gain.gain.exponentialRampToValueAtTime(.0001,start+.18);oscillator.connect(gain).connect(notificationAudio.destination);oscillator.start(start);oscillator.stop(start+.2);});}catch(err){console.warn("Notification sound failed.",err);}}
+function showToast(message){const toast=document.createElement("div");toast.className="fixed bottom-4 right-4 z-40 rounded-lg bg-slate-900 px-4 py-3 text-sm font-semibold text-white shadow-lg";toast.textContent=message;document.body.appendChild(toast);setTimeout(()=>toast.remove(),3200);}
 document.querySelectorAll(".tab").forEach(b=>b.onclick=()=>setTab(b.dataset.tab));
 function setTab(tab){ currentTab=tab; document.querySelectorAll(".tab").forEach(b=>b.classList.toggle("active",b.dataset.tab===tab)); render(); }
 function render(){ if(currentTab==="form") renderForm(); if(currentTab==="logs") renderLogs(); if(currentTab==="admin") renderAdmin(); }
@@ -134,13 +174,11 @@ async function submitReport(e){
       signatureData:signaturePad.data(),
       status:"submitted",
       pdfStatus:"on_demand",
-      submittedBy:"Local Test User",
-      submitterId:"local-test",
-      timestamp:new Date().toISOString()
+      submittedBy:userEmail,
+      submitterId:userId,
+      timestamp:serverTimestamp()
     };
-    payload.id=makeId();
-    reports.unshift(payload);
-    saveReports();
+    await addDoc(collection(db,REPORTS_PATH),payload);
     form.reset();
     signaturePad.clear();
     showNotice(`Report ${tempNo} submitted successfully.\nIt is now visible in the shared Log.`);
@@ -187,8 +225,9 @@ function printReport(r){
   w.document.write(`<!doctype html><html><head><title>${escapeHtml(r.reportNo||"Service Report")}</title>${pdfStyles()}</head><body>${buildPrintableReport(r)}<script>window.onload=()=>{window.print()}<\/script></body></html>`);w.document.close();
 }
 
-function sortedReports(){ return [...reports].sort((a,b)=>new Date(b.timestamp||0)-new Date(a.timestamp||0)); }
-function renderLogs(){ const rows=sortedReports(); view.innerHTML=`<div class="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"><div><h2 class="text-xl font-bold">Service Report Log</h2><p class="text-sm text-slate-500">Shared submission status for technicians and administrators.</p></div><button id="refreshLog" class="btn bg-slate-200 text-slate-700">Refresh</button></div><div id="logList" class="space-y-3"></div>`; document.getElementById("refreshLog").onclick=()=>{reports=loadReports();renderLogs();}; const list=document.getElementById("logList"); if(!rows.length){list.innerHTML=`<div class="py-16 text-center font-semibold text-slate-400">No submitted service reports</div>`;return;} rows.forEach(r=>list.appendChild(reportCard(r,false))); }
+function timestampMillis(value){if(value?.toMillis)return value.toMillis();const parsed=new Date(value||0).getTime();return Number.isNaN(parsed)?0:parsed;}
+function sortedReports(){return [...reports].sort((a,b)=>timestampMillis(b.timestamp)-timestampMillis(a.timestamp));}
+function renderLogs(){ const rows=sortedReports(); view.innerHTML=`<div class="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"><div><h2 class="text-xl font-bold">Service Report Log</h2><p class="text-sm text-slate-500">Live submission status for technicians and administrators.</p></div></div><div id="logList" class="space-y-3"></div>`; const list=document.getElementById("logList"); if(!rows.length){list.innerHTML=`<div class="py-16 text-center font-semibold text-slate-400">No submitted service reports</div>`;return;} rows.forEach(r=>list.appendChild(reportCard(r,false))); }
 function reportCard(r,admin){
   const el=document.createElement("article");
   const status=normalizeStatus(r.status);
@@ -199,26 +238,24 @@ function reportCard(r,admin){
   if(admin){el.querySelector(".saveAdmin").onclick=()=>saveAdmin(r.id,el);el.querySelector(".deleteReport").onclick=()=>deleteReport(r);}
   return el;
 }
-function renderAdmin(){ const rows=sortedReports(); view.innerHTML=`<div class="mb-4"><h2 class="text-xl font-bold">Service Report Administration</h2><p class="text-sm text-slate-500">Download, print and update processing status.</p></div><div id="adminList" class="space-y-3"></div>`; const list=document.getElementById("adminList"); if(!rows.length){list.innerHTML=`<div class="py-16 text-center font-semibold text-slate-400">No reports</div>`;return;} rows.forEach(r=>list.appendChild(reportCard(r,true))); }
-function adminPanel(r){ const status=normalizeStatus(r.status); return `<div class="mt-4 grid gap-3 border-t pt-4 md:grid-cols-2"><label class="text-sm font-semibold text-slate-600">ERP Reference<input class="erp field mt-1" value="${escapeAttr(r.erpReference||"")}"></label><label class="text-sm font-semibold text-slate-600">Status<select class="status field mt-1"><option value="submitted" ${status==="submitted"?'selected':''}>Submitted</option><option value="processed" ${status==="processed"?'selected':''}>Processed</option></select></label><label class="text-sm font-semibold text-slate-600 md:col-span-2">Admin Remark<textarea class="remark field mt-1" rows="2">${escapeHtml(r.adminRemark||"")}</textarea></label><div class="flex flex-col gap-2 sm:flex-row md:col-span-2"><button class="saveAdmin btn btn-green">Save Admin Update</button><button class="deleteReport btn btn-red">Delete</button></div></div>`; }
+function renderAdmin(){ if(!isAdmin){setTab("form");return;} const rows=sortedReports(); view.innerHTML=`<div class="mb-4"><h2 class="text-xl font-bold">Service Report Administration</h2><p class="text-sm text-slate-500">Download, print and update processing status.</p></div><div id="adminList" class="space-y-3"></div>`; const list=document.getElementById("adminList"); if(!rows.length){list.innerHTML=`<div class="py-16 text-center font-semibold text-slate-400">No reports</div>`;return;} rows.forEach(r=>list.appendChild(reportCard(r,true))); }
+function adminPanel(r){ const status=normalizeStatus(r.status); return `<div class="mt-4 grid gap-3 border-t pt-4 md:grid-cols-2"><label class="text-sm font-semibold text-slate-600">ERP Reference<input class="erp field mt-1" value="${escapeAttr(r.erpReference||"")}"></label><label class="text-sm font-semibold text-slate-600">Status<select class="status field mt-1"><option value="submitted" ${status==="submitted"?'selected':''}>Submitted</option><option value="quotation_required" ${status==="quotation_required"?'selected':''}>Quotation Required</option><option value="quotation_submitted" ${status==="quotation_submitted"?'selected':''}>Quotation Submitted</option><option value="invoice_pending" ${status==="invoice_pending"?'selected':''}>Invoice Pending</option><option value="invoice_issued" ${status==="invoice_issued"?'selected':''}>Invoice Issued</option><option value="payment_received_closed" ${status==="payment_received_closed"?'selected':''}>Payment Received – Closed</option><option value="cancelled" ${status==="cancelled"?'selected':''}>Cancelled</option></select></label><label class="text-sm font-semibold text-slate-600 md:col-span-2">Admin Remark<textarea class="remark field mt-1" rows="2">${escapeHtml(r.adminRemark||"")}</textarea></label><div class="flex flex-col gap-2 sm:flex-row md:col-span-2"><button class="saveAdmin btn btn-green">Save Admin Update</button><button class="deleteReport btn btn-red">Delete</button></div></div>`; }
 async function saveAdmin(id,el){
   const record=reports.find(x=>x.id===id);
   if(!record){showNotice("Record not found.");return;}
-  record.erpReference=el.querySelector(".erp").value.trim();
-  record.status=el.querySelector(".status").value;
-  record.adminRemark=el.querySelector(".remark").value.trim();
-  record.statusUpdatedBy="Local Test Admin";
-  record.statusUpdatedAt=new Date().toISOString();
-  saveReports(); render(); showNotice("Admin update saved locally.");
+  try{
+    await updateDoc(doc(db,REPORTS_PATH,id),{erpReference:el.querySelector(".erp").value.trim(),status:el.querySelector(".status").value,adminRemark:el.querySelector(".remark").value.trim(),statusUpdatedBy:userEmail,statusUpdatedAt:serverTimestamp()});
+    showNotice("Admin update saved.");
+  }catch(err){showNotice("Admin update failed: "+formatError(err));}
 }
 async function deleteReport(r){
   if(!confirm(`Delete ${r.reportNo}? This cannot be undone.`))return;
-  reports=reports.filter(x=>x.id!==r.id); saveReports(); render();
+  try{await deleteDoc(doc(db,REPORTS_PATH,r.id));}catch(err){showNotice("Delete failed: "+formatError(err));}
 }
-function normalizeStatus(s){return s==="processed"||["processing","erp_recorded","sent","completed"].includes(s)?"processed":"submitted";} function statusLabel(s){return({submitted:"Submitted",processed:"Processed"})[normalizeStatus(s)];} function statusClass(s){return({submitted:"bg-red-100 text-red-700",processed:"bg-emerald-100 text-emerald-700"})[normalizeStatus(s)];}
+const STATUS_LABELS={submitted:"Submitted",quotation_required:"Quotation Required",quotation_submitted:"Quotation Submitted",invoice_pending:"Invoice Pending",invoice_issued:"Invoice Issued",payment_received_closed:"Payment Received – Closed",cancelled:"Cancelled"};
+function normalizeStatus(s){return Object.hasOwn(STATUS_LABELS,s)?s:"submitted";} function statusLabel(s){return STATUS_LABELS[normalizeStatus(s)];} function statusClass(s){return({submitted:"bg-blue-100 text-blue-700",quotation_required:"bg-amber-100 text-amber-700",quotation_submitted:"bg-indigo-100 text-indigo-700",invoice_pending:"bg-orange-100 text-orange-700",invoice_issued:"bg-purple-100 text-purple-700",payment_received_closed:"bg-emerald-100 text-emerald-700",cancelled:"bg-red-100 text-red-700"})[normalizeStatus(s)];}
 function setLoading(button,on){button.disabled=on;button.querySelector(".loader")?.classList.toggle("hidden",!on);} function formatTime(ts){if(!ts)return "Just now"; if(ts?.toDate)return ts.toDate().toLocaleString(); const d=new Date(ts); return Number.isNaN(d.getTime())?"Just now":d.toLocaleString();} function formatError(e){return [e?.code,e?.message].filter(Boolean).join(": ")||"Unknown error";} function escapeHtml(v){return String(v??"").replaceAll("&","&amp;").replaceAll("<","&lt;").replaceAll(">","&gt;").replaceAll('"',"&quot;").replaceAll("'","&#039;");} function escapeAttr(v){return escapeHtml(v);}
 function showNotice(message){document.getElementById("notice-text").textContent=message;document.getElementById("notice").classList.remove("hidden");document.getElementById("notice").classList.add("flex");} window.closeNotice=()=>{document.getElementById("notice").classList.add("hidden");document.getElementById("notice").classList.remove("flex");};
-render();
 </script>
 </body>
 </html>
