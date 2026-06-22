@@ -48,7 +48,6 @@
       <button class="tab active" data-tab="form">Service Form</button>
       <button class="tab" data-tab="logs">Log</button>
       <button class="tab" data-tab="admin">Admin</button>
-      <button class="tab" data-tab="archived">Archived</button>
       <button class="tab" data-tab="audit">Audit Trail</button>
     </nav>
     <div id="view" class="min-h-[430px] p-2 md:p-5"></div>
@@ -59,8 +58,7 @@
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
 import { getAuth, onAuthStateChanged, signInWithEmailAndPassword, signOut } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-import { getFirestore, collection, query, onSnapshot, serverTimestamp, doc, writeBatch, setDoc, updateDoc, Timestamp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
-import { getStorage, ref as storageRef, uploadBytes, getBlob, deleteObject } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-storage.js";
+import { getFirestore, collection, addDoc, query, onSnapshot, serverTimestamp, doc, writeBatch } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
 const firebaseConfig={
   apiKey:"AIzaSyBZ0-KPzLs13U7uG0KIqiYbKdbOBqVT7cQ",
@@ -74,8 +72,6 @@ const firebaseConfig={
 const DATA_ROOT="artifacts/inventory-tracker-app-dev/public/data";
 const REPORTS_PATH=`${DATA_ROOT}/service_reports`;
 const AUDIT_PATH=`${DATA_ROOT}/service_report_audit`;
-const REPORT_RETENTION_DAYS=90;
-const AUDIT_RETENTION_DAYS=365;
 const ADMIN_NAMES={
   "may@airnovation.com.sg":"May",
   "aepl01@airnovation.com.sg":"HuiXin",
@@ -86,37 +82,37 @@ const ADMIN_NAMES={
   "eric@airnovation.com.sg":"Boss"
 };
 const STAFF_EMAILS=new Set(["aepl.airnovation@gmail.com"]);
-const app=initializeApp(firebaseConfig), auth=getAuth(app), db=getFirestore(app), storage=getStorage(app);
-let currentTab="form", reports=[], adminAudits=[], signaturePad=null, userId=null, userEmail="", isAdmin=false, unsubscribeReports=null, unsubscribeAudits=null, reportsSnapshotReady=false, notificationAudio=null, cleanupRunning=false;
-const view=document.getElementById("view"), appNav=document.getElementById("app-nav"), authState=document.getElementById("auth-state"), adminTab=document.querySelector('[data-tab="admin"]'), archivedTab=document.querySelector('[data-tab="archived"]'), auditTab=document.querySelector('[data-tab="audit"]');
+const app=initializeApp(firebaseConfig), auth=getAuth(app), db=getFirestore(app);
+let currentTab="form", reports=[], adminAudits=[], signaturePad=null, userId=null, userEmail="", isAdmin=false, unsubscribeReports=null, unsubscribeAudits=null, reportsSnapshotReady=false, notificationAudio=null;
+const view=document.getElementById("view"), appNav=document.getElementById("app-nav"), authState=document.getElementById("auth-state"), adminTab=document.querySelector('[data-tab="admin"]'), auditTab=document.querySelector('[data-tab="audit"]');
 
 document.addEventListener("click",unlockNotificationSound,{once:true});
 onAuthStateChanged(auth,async user=>{
   stopReportsSnapshot();
   if(!user){
-    userId=null;userEmail="";isAdmin=false;reports=[];adminAudits=[];authState.textContent="";appNav.classList.add("hidden");adminTab.classList.add("hidden");archivedTab.classList.add("hidden");auditTab.classList.add("hidden");renderLogin();return;
+    userId=null;userEmail="";isAdmin=false;reports=[];adminAudits=[];authState.textContent="";appNav.classList.add("hidden");adminTab.classList.add("hidden");auditTab.classList.add("hidden");renderLogin();return;
   }
   const email=(user.email||"").toLowerCase();
   if(!isAllowedUser(email)){await signOut(auth);showNotice("This account is not authorized to use the Service Report application.");return;}
   userId=user.uid;userEmail=email;isAdmin=Object.hasOwn(ADMIN_NAMES,email);
   authState.innerHTML=`<span>${isAdmin?`Admin: ${escapeHtml(ADMIN_NAMES[email])}`:`Technician: ${escapeHtml(email)}`}</span><button id="app-logout" class="ml-3 font-bold text-blue-600" type="button">Logout</button>`;
   document.getElementById("app-logout").onclick=logoutUser;
-  appNav.classList.remove("hidden");appNav.classList.add("flex");adminTab.classList.toggle("hidden",!isAdmin);archivedTab.classList.toggle("hidden",!isAdmin);auditTab.classList.toggle("hidden",!isAdmin);
-  if(!isAdmin&&["admin","archived","audit"].includes(currentTab)) setTab("form");
+  appNav.classList.remove("hidden");appNav.classList.add("flex");adminTab.classList.toggle("hidden",!isAdmin);auditTab.classList.toggle("hidden",!isAdmin);
+  if(!isAdmin&&["admin","audit"].includes(currentTab)) setTab("form");
   startReportsSnapshot();render();
 });
 function isAllowedUser(email){return Object.hasOwn(ADMIN_NAMES,email)||STAFF_EMAILS.has(email);}
 function renderLogin(){view.innerHTML=`<form id="user-login" class="mx-auto max-w-sm space-y-4 py-10"><h2 class="text-xl font-bold text-slate-800">Service Report Login</h2><input id="user-email" type="email" required autocomplete="username" class="field" placeholder="Email"><input id="user-password" type="password" required autocomplete="current-password" class="field" placeholder="Password"><p id="user-login-error" class="hidden text-sm font-semibold text-red-600"></p><button class="btn btn-primary w-full" type="submit">Login</button></form>`;document.getElementById("user-login").onsubmit=userLogin;}
 async function userLogin(e){e.preventDefault();const error=document.getElementById("user-login-error");try{const email=document.getElementById("user-email").value.trim().toLowerCase();if(!isAllowedUser(email))throw new Error("This email is not authorized.");await signInWithEmailAndPassword(auth,email,document.getElementById("user-password").value);}catch(err){console.error(err);error.textContent="Login failed: "+formatError(err);error.classList.remove("hidden");}}
 async function logoutUser(){await signOut(auth).catch(err=>showNotice("Logout failed: "+formatError(err)));currentTab="form";document.querySelectorAll(".tab").forEach(b=>b.classList.toggle("active",b.dataset.tab==="form"));}
-function startReportsSnapshot(){reportsSnapshotReady=false;unsubscribeReports=onSnapshot(query(collection(db,REPORTS_PATH)),snap=>{if(reportsSnapshotReady&&isAdmin&&snap.docChanges().some(change=>change.type==="added")){playNotificationSound();showToast("New service report received.");}reportsSnapshotReady=true;reports=snap.docs.map(d=>({id:d.id,...d.data()}));render();if(isAdmin)cleanupExpiredReports();},err=>showNotice("Cannot load service reports: "+formatError(err)));if(isAdmin){unsubscribeAudits=onSnapshot(query(collection(db,AUDIT_PATH)),snap=>{adminAudits=snap.docs.map(d=>({id:d.id,...d.data()}));if(currentTab==="audit")renderAudit();},err=>showNotice("Cannot load admin audit records: "+formatError(err)));}}
+function startReportsSnapshot(){reportsSnapshotReady=false;unsubscribeReports=onSnapshot(query(collection(db,REPORTS_PATH)),snap=>{if(reportsSnapshotReady&&isAdmin&&snap.docChanges().some(change=>change.type==="added")){playNotificationSound();showToast("New service report received.");}reportsSnapshotReady=true;reports=snap.docs.map(d=>({id:d.id,...d.data()}));render();},err=>showNotice("Cannot load service reports: "+formatError(err)));if(isAdmin){unsubscribeAudits=onSnapshot(query(collection(db,AUDIT_PATH)),snap=>{adminAudits=snap.docs.map(d=>({id:d.id,...d.data()}));if(currentTab==="audit")renderAudit();},err=>showNotice("Cannot load admin audit records: "+formatError(err)));}}
 function stopReportsSnapshot(){unsubscribeReports?.();unsubscribeAudits?.();unsubscribeReports=null;unsubscribeAudits=null;reportsSnapshotReady=false;adminAudits=[];}
 function unlockNotificationSound(){try{const AudioContext=window.AudioContext||window.webkitAudioContext;if(!AudioContext)return;notificationAudio||=new AudioContext();if(notificationAudio.state==="suspended")notificationAudio.resume();}catch(err){console.warn("Notification sound could not be enabled.",err);}}
 function playNotificationSound(){try{unlockNotificationSound();if(!notificationAudio||notificationAudio.state!=="running")return;const now=notificationAudio.currentTime;[880,1175].forEach((frequency,index)=>{const oscillator=notificationAudio.createOscillator(),gain=notificationAudio.createGain(),start=now+index*.12;oscillator.type="sine";oscillator.frequency.setValueAtTime(frequency,start);gain.gain.setValueAtTime(.0001,start);gain.gain.exponentialRampToValueAtTime(.18,start+.02);gain.gain.exponentialRampToValueAtTime(.0001,start+.18);oscillator.connect(gain).connect(notificationAudio.destination);oscillator.start(start);oscillator.stop(start+.2);});}catch(err){console.warn("Notification sound failed.",err);}}
 function showToast(message){const toast=document.createElement("div");toast.className="fixed bottom-4 right-4 z-40 rounded-lg bg-slate-900 px-4 py-3 text-sm font-semibold text-white shadow-lg";toast.textContent=message;document.body.appendChild(toast);setTimeout(()=>toast.remove(),3200);}
 document.querySelectorAll(".tab").forEach(b=>b.onclick=()=>setTab(b.dataset.tab));
 function setTab(tab){ currentTab=tab; document.querySelectorAll(".tab").forEach(b=>b.classList.toggle("active",b.dataset.tab===tab)); render(); }
-function render(){ if(currentTab==="form") renderForm(); if(currentTab==="logs") renderLogs(); if(currentTab==="admin") renderAdmin(); if(currentTab==="archived") renderArchived(); if(currentTab==="audit") renderAudit(); }
+function render(){ if(currentTab==="form") renderForm(); if(currentTab==="logs") renderLogs(); if(currentTab==="admin") renderAdmin(); if(currentTab==="audit") renderAudit(); }
 
 function renderForm(){
 view.innerHTML=`<form id="service-form" class="space-y-4">
@@ -180,20 +176,15 @@ async function submitReport(e){
       designation:document.getElementById("designation").value.trim(),
       signatureData:signaturePad.data(),
       status:"submitted",
-      pdfStatus:"generating",
-      archived:false,
+      pdfStatus:"on_demand",
       submittedBy:userEmail,
       submitterId:userId,
       timestamp:serverTimestamp()
     };
-    const reportRef=doc(collection(db,REPORTS_PATH));
-    let pdfMessage="Signed PDF saved.";
-    try{Object.assign(payload,await createAndUploadReportPdf(reportRef.id,{id:reportRef.id,...payload,timestamp:new Date().toISOString()}));}
-    catch(pdfError){console.error(pdfError);pdfMessage="Report saved, but PDF generation failed. An admin can retry.";Object.assign(payload,{pdfStatus:"failed",pdfError:formatError(pdfError)});}
-    await setDoc(reportRef,payload);
+    await addDoc(collection(db,REPORTS_PATH),payload);
     form.reset();
     signaturePad.clear();
-    showNotice(`Report ${tempNo} submitted successfully.\n${pdfMessage}`);
+    showNotice(`Report ${tempNo} submitted successfully.\nIt is now visible in the shared Log.`);
     setTimeout(()=>setTab("logs"),500);
   }catch(err){
     console.error(err);
@@ -226,14 +217,12 @@ function pdfStyles(){return `<style>
 </style>`}
 function money(v){return `$${(Number(v)||0).toFixed(2)}`}
 function nl2br(v){return escapeHtml(v||"").replaceAll("\n","<br>")}
-async function waitForImages(root){await Promise.all([...root.querySelectorAll("img")].map(img=>img.complete?Promise.resolve():new Promise(resolve=>{img.onload=resolve;img.onerror=resolve;})));}
-async function createReportPdfBlob(r){const host=document.createElement("div");host.style.position="fixed";host.style.left="-10000px";host.innerHTML=pdfStyles()+buildPrintableReport(r);document.body.appendChild(host);try{await waitForImages(host);return await html2pdf().set({margin:0,image:{type:"jpeg",quality:.96},html2canvas:{scale:2,useCORS:true},jsPDF:{unit:"mm",format:"a4",orientation:"portrait"}}).from(host.querySelector(".pdf-sheet")).outputPdf("blob");}finally{host.remove();}}
-async function sha256Hex(blob){const digest=await crypto.subtle.digest("SHA-256",await blob.arrayBuffer());return [...new Uint8Array(digest)].map(b=>b.toString(16).padStart(2,"0")).join("");}
-async function createAndUploadReportPdf(reportId,record){const blob=await createReportPdfBlob(record),path=`service-reports/${reportId}/signed-report.pdf`,fileRef=storageRef(storage,path);await uploadBytes(fileRef,blob,{contentType:"application/pdf",customMetadata:{reportId,reportNo:record.reportNo||""}});return{pdfPath:path,pdfStatus:"ready",pdfCreatedAt:serverTimestamp(),pdfSize:blob.size,pdfHash:await sha256Hex(blob),pdfError:""};}
-async function generateAndStoreReportPdf(reportId,record){await updateDoc(doc(db,REPORTS_PATH,reportId),await createAndUploadReportPdf(reportId,record));}
-async function downloadStoredPdf(r){if(!r.pdfPath){showNotice("Stored PDF is not available.");return;}try{const blob=await getBlob(storageRef(storage,r.pdfPath)),url=URL.createObjectURL(blob),link=document.createElement("a");link.href=url;link.download=`${r.reportNo||"service-report"}.pdf`;document.body.appendChild(link);link.click();link.remove();setTimeout(()=>URL.revokeObjectURL(url),1000);}catch(err){showNotice("PDF download failed: "+formatError(err));}}
-async function retryStoredPdf(r){const actorName=ADMIN_NAMES[userEmail]||userEmail;try{await updateDoc(doc(db,REPORTS_PATH,r.id),{pdfStatus:"generating",pdfError:""});await generateAndStoreReportPdf(r.id,r);await setDoc(doc(collection(db,AUDIT_PATH)),{reportId:r.id,reportNo:r.reportNo||"",action:"pdf_retry",summary:"Signed PDF regenerated",actorName,actorEmail:userEmail,timestamp:serverTimestamp(),expiresAt:futureTimestamp(AUDIT_RETENTION_DAYS)});showNotice("Signed PDF regenerated successfully.");}catch(err){await updateDoc(doc(db,REPORTS_PATH,r.id),{pdfStatus:"failed",pdfError:formatError(err)}).catch(()=>{});await setDoc(doc(collection(db,AUDIT_PATH)),{reportId:r.id,reportNo:r.reportNo||"",action:"pdf_retry_failed",summary:"Signed PDF regeneration failed",actorName,actorEmail:userEmail,timestamp:serverTimestamp(),expiresAt:futureTimestamp(AUDIT_RETENTION_DAYS)}).catch(()=>{});showNotice("PDF generation failed: "+formatError(err));}}
-async function downloadReportPdf(r){if(r.pdfStatus==="ready"&&r.pdfPath)return downloadStoredPdf(r);showNotice("Signed PDF is still being prepared or requires an admin retry.");}
+async function downloadReportPdf(r){
+  const host=document.createElement("div"); host.style.position="fixed";host.style.left="-10000px";host.innerHTML=pdfStyles()+buildPrintableReport(r);document.body.appendChild(host);
+  try{await html2pdf().set({margin:0,filename:`${r.reportNo||"service-report"}.pdf`,image:{type:"jpeg",quality:.96},html2canvas:{scale:2,useCORS:true},jsPDF:{unit:"mm",format:"a4",orientation:"portrait"}}).from(host.querySelector(".pdf-sheet")).save();}
+  catch(err){showNotice("PDF generation failed: "+formatError(err));}
+  finally{host.remove();}
+}
 function printReport(r){
   const w=window.open("","_blank"); if(!w){showNotice("Please allow pop-ups to print.");return;}
   w.document.write(`<!doctype html><html><head><title>${escapeHtml(r.reportNo||"Service Report")}</title>${pdfStyles()}</head><body>${buildPrintableReport(r)}<script>window.onload=()=>{window.print()}<\/script></body></html>`);w.document.close();
@@ -241,40 +230,37 @@ function printReport(r){
 
 function timestampMillis(value){if(value?.toMillis)return value.toMillis();const parsed=new Date(value||0).getTime();return Number.isNaN(parsed)?0:parsed;}
 function sortedReports(){return [...reports].sort((a,b)=>timestampMillis(b.timestamp)-timestampMillis(a.timestamp));}
-function futureTimestamp(days){return Timestamp.fromDate(new Date(Date.now()+days*86400000));}
-function renderLogs(){ const rows=sortedReports().filter(r=>!r.archived); view.innerHTML=`<div class="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"><div><h2 class="text-xl font-bold">Service Report Log</h2><p class="text-sm text-slate-500">Live submission status for technicians and administrators.</p></div></div><div id="logList" class="space-y-3"></div>`; const list=document.getElementById("logList"); if(!rows.length){list.innerHTML=`<div class="py-16 text-center font-semibold text-slate-400">No submitted service reports</div>`;return;} rows.forEach(r=>list.appendChild(reportCard(r,false))); }
+function renderLogs(){ const rows=sortedReports(); view.innerHTML=`<div class="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"><div><h2 class="text-xl font-bold">Service Report Log</h2><p class="text-sm text-slate-500">Live submission status for technicians and administrators.</p></div></div><div id="logList" class="space-y-3"></div>`; const list=document.getElementById("logList"); if(!rows.length){list.innerHTML=`<div class="py-16 text-center font-semibold text-slate-400">No submitted service reports</div>`;return;} rows.forEach(r=>list.appendChild(reportCard(r,false))); }
 function reportCard(r,admin){
   const el=document.createElement("article");
   const status=normalizeStatus(r.status);
-  const pdfReady=r.pdfStatus==="ready"&&r.pdfPath,pdfLabel=pdfReady?"PDF Ready":r.pdfStatus==="failed"?"PDF Failed":"Generating PDF";
   el.className="card border-l-4 border-l-blue-500 p-4";
-  el.innerHTML=`<div class="flex flex-col gap-3 sm:flex-row sm:justify-between"><div><h3 class="font-bold text-slate-800">${escapeHtml(r.reportNo||"Service Report")}</h3><p class="text-sm text-slate-600">${escapeHtml(r.client||"")} · ${escapeHtml(r.technician||"")}</p><p class="text-xs text-slate-400">Submitted ${formatTime(r.timestamp)}</p></div><div class="sm:text-right"><span class="badge ${statusClass(status)}">${statusLabel(status)}</span><p class="mt-1 text-xs font-semibold ${pdfReady?'text-emerald-600':'text-slate-400'}">${pdfLabel}</p><div class="mt-3 flex flex-wrap gap-2 sm:justify-end"><button class="printPdf btn bg-slate-200 px-3 py-2 text-slate-700" type="button">Print</button><button class="downloadPdf btn btn-primary px-3 py-2" type="button" ${pdfReady?'':'disabled'}>Download Signed PDF</button>${admin&&!pdfReady?`<button class="retryPdf btn bg-amber-100 px-3 py-2 text-amber-700" type="button">Retry PDF</button>`:""}</div></div></div>${admin?adminPanel(r):""}`;
+  el.innerHTML=`<div class="flex flex-col gap-3 sm:flex-row sm:justify-between"><div><h3 class="font-bold text-slate-800">${escapeHtml(r.reportNo||"Service Report")}</h3><p class="text-sm text-slate-600">${escapeHtml(r.client||"")} · ${escapeHtml(r.technician||"")}</p><p class="text-xs text-slate-400">Submitted ${formatTime(r.timestamp)}</p></div><div class="sm:text-right"><span class="badge ${statusClass(status)}">${statusLabel(status)}</span><div class="mt-3 flex flex-wrap gap-2 sm:justify-end"><button class="printPdf btn bg-slate-200 px-3 py-2 text-slate-700" type="button">Print</button><button class="downloadPdf btn btn-primary px-3 py-2" type="button">Download PDF</button></div></div></div>${admin?adminPanel(r):""}`;
   el.querySelector(".downloadPdf").onclick=()=>downloadReportPdf(r);
   el.querySelector(".printPdf").onclick=()=>printReport(r);
-  if(admin){el.querySelector(".saveAdmin")?.addEventListener("click",()=>saveAdmin(r.id,el));el.querySelector(".archiveReport")?.addEventListener("click",()=>archiveReport(r));el.querySelector(".retryPdf")?.addEventListener("click",()=>retryStoredPdf(r));}
+  if(admin){el.querySelector(".saveAdmin").onclick=()=>saveAdmin(r.id,el);el.querySelector(".deleteReport").onclick=()=>deleteReport(r);}
   return el;
 }
-function renderAdmin(){if(!isAdmin){setTab("form");return;}const rows=sortedReports().filter(r=>!r.archived);view.innerHTML=`<div class="mb-4"><h2 class="text-xl font-bold">Service Report Administration</h2><p class="text-sm text-slate-500">Download, print and update processing status. Every admin action is recorded.</p></div><div id="adminList" class="space-y-3"></div>`;const list=document.getElementById("adminList");if(!rows.length)list.innerHTML=`<div class="py-10 text-center font-semibold text-slate-400">No active reports</div>`;else rows.forEach(r=>list.appendChild(reportCard(r,true)));}
-function renderArchived(){if(!isAdmin){setTab("form");return;}const rows=sortedReports().filter(r=>r.archived);view.innerHTML=`<div class="mb-4"><h2 class="text-xl font-bold">Archived Reports</h2><p class="text-sm text-slate-500">Archived reports and signed PDFs are retained for ${REPORT_RETENTION_DAYS} days before cleanup.</p></div><div id="archivedList" class="space-y-3"></div>`;const list=document.getElementById("archivedList");if(!rows.length){list.innerHTML=`<div class="py-10 text-center font-semibold text-slate-400">No archived reports</div>`;return;}rows.forEach(r=>{const card=reportCard(r,false),footer=document.createElement("div");footer.className="mt-3 flex flex-col gap-2 border-t pt-3 sm:flex-row sm:items-center sm:justify-between";footer.innerHTML=`<span class="text-xs font-semibold text-slate-500">Expires: ${formatTime(r.expiresAt)}</span><button class="restoreReport btn btn-green px-3 py-2" type="button">Restore</button>`;footer.querySelector(".restoreReport").onclick=()=>restoreReport(r);card.appendChild(footer);list.appendChild(card);});}
+function renderAdmin(){if(!isAdmin){setTab("form");return;}const rows=sortedReports();view.innerHTML=`<div class="mb-4"><h2 class="text-xl font-bold">Service Report Administration</h2><p class="text-sm text-slate-500">Download, print and update processing status. Every admin action is recorded.</p></div><div id="adminList" class="space-y-3"></div>`;const list=document.getElementById("adminList");if(!rows.length)list.innerHTML=`<div class="py-10 text-center font-semibold text-slate-400">No reports</div>`;else rows.forEach(r=>list.appendChild(reportCard(r,true)));}
 function renderAudit(){if(!isAdmin){setTab("form");return;}view.innerHTML=`<div class="mb-4"><h2 class="text-xl font-bold">Admin Audit Trail</h2><p class="text-sm text-slate-500">Immutable record of Service Report updates and deletions.</p></div><div id="adminAuditList" class="space-y-2"></div>`;renderAuditList();}
 function renderAuditList(){const list=document.getElementById("adminAuditList");if(!list)return;const rows=[...adminAudits].sort((a,b)=>timestampMillis(b.timestamp)-timestampMillis(a.timestamp)).slice(0,50);if(!rows.length){list.innerHTML=`<div class="rounded-lg bg-slate-50 p-4 text-sm font-semibold text-slate-400">No admin actions recorded yet.</div>`;return;}list.innerHTML=rows.map(a=>`<article class="rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm"><div class="flex flex-col gap-1 sm:flex-row sm:justify-between"><strong>${escapeHtml(a.reportNo||"Service Report")}</strong><span class="text-slate-500">${formatTime(a.timestamp)}</span></div><p class="mt-1 text-slate-700">${escapeHtml(a.summary||a.action||"Admin action")}</p><p class="mt-1 text-xs font-semibold text-slate-500">${escapeHtml(a.actorName||"Admin")} · ${escapeHtml(a.actorEmail||"")}</p></article>`).join("");}
-function adminPanel(r){ const status=normalizeStatus(r.status),lastAction=r.lastAdminAction?`${r.lastAdminAction} · ${r.lastAdminActorName||r.lastAdminActorEmail||"Admin"} · ${formatTime(r.lastAdminActionAt)}`:"No admin action recorded yet."; return `<div class="mt-4 grid gap-3 border-t pt-4 md:grid-cols-2"><label class="text-sm font-semibold text-slate-600">ERP Reference<input class="erp field mt-1" value="${escapeAttr(r.erpReference||"")}"></label><label class="text-sm font-semibold text-slate-600">Status<select class="status field mt-1"><option value="submitted" ${status==="submitted"?'selected':''}>Submitted</option><option value="quotation_required" ${status==="quotation_required"?'selected':''}>Quotation Required</option><option value="quotation_submitted" ${status==="quotation_submitted"?'selected':''}>Quotation Submitted</option><option value="invoice_pending" ${status==="invoice_pending"?'selected':''}>Invoice Pending</option><option value="invoice_issued" ${status==="invoice_issued"?'selected':''}>Invoice Issued</option><option value="payment_received_closed" ${status==="payment_received_closed"?'selected':''}>Payment Received – Closed</option><option value="cancelled" ${status==="cancelled"?'selected':''}>Cancelled</option></select></label><label class="text-sm font-semibold text-slate-600 md:col-span-2">Admin Remark<textarea class="remark field mt-1" rows="2">${escapeHtml(r.adminRemark||"")}</textarea></label><div class="rounded-lg bg-slate-50 p-3 text-xs font-semibold text-slate-500 md:col-span-2">Last action: ${escapeHtml(lastAction)}</div><div class="flex flex-col gap-2 sm:flex-row md:col-span-2"><button class="saveAdmin btn btn-green">Save Admin Update</button><button class="archiveReport btn bg-slate-800 text-white">Archive</button></div></div>`; }
+function adminPanel(r){ const status=normalizeStatus(r.status),lastAction=r.lastAdminAction?`${r.lastAdminAction} · ${r.lastAdminActorName||r.lastAdminActorEmail||"Admin"} · ${formatTime(r.lastAdminActionAt)}`:"No admin action recorded yet."; return `<div class="mt-4 grid gap-3 border-t pt-4 md:grid-cols-2"><label class="text-sm font-semibold text-slate-600">ERP Reference<input class="erp field mt-1" value="${escapeAttr(r.erpReference||"")}"></label><label class="text-sm font-semibold text-slate-600">Status<select class="status field mt-1"><option value="submitted" ${status==="submitted"?'selected':''}>Submitted</option><option value="quotation_required" ${status==="quotation_required"?'selected':''}>Quotation Required</option><option value="quotation_submitted" ${status==="quotation_submitted"?'selected':''}>Quotation Submitted</option><option value="invoice_pending" ${status==="invoice_pending"?'selected':''}>Invoice Pending</option><option value="invoice_issued" ${status==="invoice_issued"?'selected':''}>Invoice Issued</option><option value="payment_received_closed" ${status==="payment_received_closed"?'selected':''}>Payment Received – Closed</option><option value="cancelled" ${status==="cancelled"?'selected':''}>Cancelled</option></select></label><label class="text-sm font-semibold text-slate-600 md:col-span-2">Admin Remark<textarea class="remark field mt-1" rows="2">${escapeHtml(r.adminRemark||"")}</textarea></label><div class="rounded-lg bg-slate-50 p-3 text-xs font-semibold text-slate-500 md:col-span-2">Last action: ${escapeHtml(lastAction)}</div><div class="flex flex-col gap-2 sm:flex-row md:col-span-2"><button class="saveAdmin btn btn-green">Save Admin Update</button><button class="deleteReport btn btn-red">Delete</button></div></div>`; }
 async function saveAdmin(id,el){
   const record=reports.find(x=>x.id===id);
   if(!record){showNotice("Record not found.");return;}
   try{
     const previousStatus=normalizeStatus(record.status),nextStatus=el.querySelector(".status").value,actorName=ADMIN_NAMES[userEmail]||userEmail,summary=previousStatus===nextStatus?"Admin details updated":`Status changed: ${statusLabel(previousStatus)} → ${statusLabel(nextStatus)}`;
     const batch=writeBatch(db),reportRef=doc(db,REPORTS_PATH,id),auditRef=doc(collection(db,AUDIT_PATH));
-    const isFinal=["payment_received_closed","cancelled"].includes(nextStatus),updateData={erpReference:el.querySelector(".erp").value.trim(),status:nextStatus,adminRemark:el.querySelector(".remark").value.trim(),statusUpdatedBy:userEmail,statusUpdatedAt:serverTimestamp(),lastAdminAction:summary,lastAdminActorName:actorName,lastAdminActorEmail:userEmail,lastAdminActionAt:serverTimestamp(),expiresAt:isFinal?(record.expiresAt||futureTimestamp(REPORT_RETENTION_DAYS)):null};
-    batch.update(reportRef,updateData);
-    batch.set(auditRef,{reportId:id,reportNo:record.reportNo||"",action:"update",summary,previousStatus,newStatus:nextStatus,actorName,actorEmail:userEmail,timestamp:serverTimestamp(),expiresAt:futureTimestamp(AUDIT_RETENTION_DAYS)});
+    batch.update(reportRef,{erpReference:el.querySelector(".erp").value.trim(),status:nextStatus,adminRemark:el.querySelector(".remark").value.trim(),statusUpdatedBy:userEmail,statusUpdatedAt:serverTimestamp(),lastAdminAction:summary,lastAdminActorName:actorName,lastAdminActorEmail:userEmail,lastAdminActionAt:serverTimestamp()});
+    batch.set(auditRef,{reportId:id,reportNo:record.reportNo||"",action:"update",summary,previousStatus,newStatus:nextStatus,actorName,actorEmail:userEmail,timestamp:serverTimestamp()});
     await batch.commit();
     showNotice("Admin update saved.");
   }catch(err){showNotice("Admin update failed: "+formatError(err));}
 }
-async function archiveReport(r){if(!confirm(`Archive ${r.reportNo}? It can be restored within ${REPORT_RETENTION_DAYS} days.`))return;try{const actorName=ADMIN_NAMES[userEmail]||userEmail,batch=writeBatch(db),summary=`Report archived (status: ${statusLabel(r.status)})`;batch.update(doc(db,REPORTS_PATH,r.id),{archived:true,archivedAt:serverTimestamp(),archivedBy:userEmail,expiresAt:r.expiresAt||futureTimestamp(REPORT_RETENTION_DAYS),lastAdminAction:summary,lastAdminActorName:actorName,lastAdminActorEmail:userEmail,lastAdminActionAt:serverTimestamp()});batch.set(doc(collection(db,AUDIT_PATH)),{reportId:r.id,reportNo:r.reportNo||"",action:"archive",summary,actorName,actorEmail:userEmail,timestamp:serverTimestamp(),expiresAt:futureTimestamp(AUDIT_RETENTION_DAYS)});await batch.commit();showNotice("Report archived.");}catch(err){showNotice("Archive failed: "+formatError(err));}}
-async function restoreReport(r){try{const actorName=ADMIN_NAMES[userEmail]||userEmail,batch=writeBatch(db),summary="Archived report restored";batch.update(doc(db,REPORTS_PATH,r.id),{archived:false,archivedAt:null,archivedBy:"",expiresAt:null,lastAdminAction:summary,lastAdminActorName:actorName,lastAdminActorEmail:userEmail,lastAdminActionAt:serverTimestamp()});batch.set(doc(collection(db,AUDIT_PATH)),{reportId:r.id,reportNo:r.reportNo||"",action:"restore",summary,actorName,actorEmail:userEmail,timestamp:serverTimestamp(),expiresAt:futureTimestamp(AUDIT_RETENTION_DAYS)});await batch.commit();showNotice("Report restored.");}catch(err){showNotice("Restore failed: "+formatError(err));}}
-async function cleanupExpiredReports(){if(cleanupRunning)return;const expired=reports.filter(r=>timestampMillis(r.expiresAt)>0&&timestampMillis(r.expiresAt)<=Date.now());if(!expired.length)return;cleanupRunning=true;try{for(const r of expired){if(r.pdfPath){try{await deleteObject(storageRef(storage,r.pdfPath));}catch(err){if(err?.code!=="storage/object-not-found")throw err;}}const batch=writeBatch(db),summary="System retention cleanup after 90 days";batch.set(doc(collection(db,AUDIT_PATH)),{reportId:r.id,reportNo:r.reportNo||"",action:"retention_cleanup",summary,actorName:"System",actorEmail:userEmail,timestamp:serverTimestamp(),expiresAt:futureTimestamp(AUDIT_RETENTION_DAYS)});batch.delete(doc(db,REPORTS_PATH,r.id));await batch.commit();}}catch(err){console.error("Retention cleanup failed",err);}finally{cleanupRunning=false;}}
+async function deleteReport(r){
+  if(!confirm(`Delete ${r.reportNo}? This cannot be undone.`))return;
+  try{const actorName=ADMIN_NAMES[userEmail]||userEmail,batch=writeBatch(db),auditRef=doc(collection(db,AUDIT_PATH));batch.set(auditRef,{reportId:r.id,reportNo:r.reportNo||"",action:"delete",summary:`Report deleted (last status: ${statusLabel(r.status)})`,previousStatus:normalizeStatus(r.status),actorName,actorEmail:userEmail,timestamp:serverTimestamp()});batch.delete(doc(db,REPORTS_PATH,r.id));await batch.commit();}catch(err){showNotice("Delete failed: "+formatError(err));}
+}
 const STATUS_LABELS={submitted:"Submitted",quotation_required:"Quotation Required",quotation_submitted:"Quotation Submitted",invoice_pending:"Invoice Pending",invoice_issued:"Invoice Issued",payment_received_closed:"Payment Received – Closed",cancelled:"Cancelled"};
 function normalizeStatus(s){return Object.hasOwn(STATUS_LABELS,s)?s:"submitted";} function statusLabel(s){return STATUS_LABELS[normalizeStatus(s)];} function statusClass(s){return({submitted:"bg-blue-100 text-blue-700",quotation_required:"bg-amber-100 text-amber-700",quotation_submitted:"bg-indigo-100 text-indigo-700",invoice_pending:"bg-orange-100 text-orange-700",invoice_issued:"bg-purple-100 text-purple-700",payment_received_closed:"bg-emerald-100 text-emerald-700",cancelled:"bg-red-100 text-red-700"})[normalizeStatus(s)];}
 function setLoading(button,on){button.disabled=on;button.querySelector(".loader")?.classList.toggle("hidden",!on);} function formatTime(ts){if(!ts)return "Just now"; if(ts?.toDate)return ts.toDate().toLocaleString(); const d=new Date(ts); return Number.isNaN(d.getTime())?"Just now":d.toLocaleString();} function formatError(e){return [e?.code,e?.message].filter(Boolean).join(": ")||"Unknown error";} function escapeHtml(v){return String(v??"").replaceAll("&","&amp;").replaceAll("<","&lt;").replaceAll(">","&gt;").replaceAll('"',"&quot;").replaceAll("'","&#039;");} function escapeAttr(v){return escapeHtml(v);}
