@@ -1,490 +1,222 @@
 <!DOCTYPE html>
-<!-- Chosen Palette: Professional Blue & Slate -->
-<!-- Application Structure Plan: The application is structured around a task-oriented user flow focused on core actions. The default view is the "Stock In/Out" form for direct data entry. Users can easily navigate to other key tasks: "Material Request", viewing the "Log" of all activities, and "Admin" for management. This simple, direct structure prioritizes operational efficiency. -->
-<!-- Visualization & Content Choices: The focus is on clear forms and lists. Data is presented in dynamically generated HTML cards within the Log, providing detailed, readable records. No complex charts are needed for this core operational view. Admin controls are conditionally rendered based on login state. -->
-<!-- CONFIRMATION: NO SVG graphics used. NO Mermaid JS used. -->
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Inventory & Material Request System</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Poppins:wght@500;600;700&display=swap" rel="stylesheet">
-    <link href="https://fonts.googleapis.com/icon?family=Material+Icons+Outlined" rel="stylesheet">
-    <style>
-        body { font-family: 'Inter', sans-serif; background: #f8fafc; }
-        h1, h2, h3 { font-family: 'Poppins', sans-serif; }
-        .main-container { box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.05), 0 10px 10px -5px rgba(0, 0, 0, 0.02); }
-        input[type="file"] { display: none; }
-        .loader { border: 3px solid rgba(255, 255, 255, 0.3); border-top: 3px solid #ffffff; border-radius: 50%; width: 20px; height: 20px; animation: spin 1s linear infinite; }
-        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
-        :root { --theme-primary: #3b82f6; --theme-primary-hover: #2563eb; --theme-green: #10b981; --theme-orange: #f97316; --theme-red: #ef4444; }
-        .tab-btn { flex: 1; border-radius: 0.5rem; padding: 0.5rem 0; font-weight: 500; text-align: center; cursor: pointer; transition: all 0.2s ease-in-out; }
-        .tab-btn.active { background-color: white; color: var(--theme-primary); box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
-        .tab-btn:not(.active) { color: #4b5563; }
-        .tab-btn:not(.active):hover { background-color: #f3f4f6; }
-        .btn { display: inline-flex; align-items: center; justify-content: center; padding: 0.75rem 1.5rem; border-radius: 0.5rem; font-weight: 600; transition: all 0.2s ease-in-out; box-shadow: 0 1px 3px 0 rgba(0,0,0,0.1), 0 1px 2px 0 rgba(0,0,0,0.06); }
-        .btn:hover { transform: translateY(-2px); box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1), 0 2px 4px -1px rgba(0,0,0,0.06); }
-        .btn:disabled { opacity: 0.6; cursor: not-allowed; }
-        .btn-primary { background-color: var(--theme-primary); color: white; }
-        .btn-primary:hover:not(:disabled) { background-color: var(--theme-primary-hover); }
-        .btn-green { background-color: var(--theme-green); color: white; }
-        .btn-green:hover:not(:disabled) { background-color: #059669; }
-        .image-thumbnail { width: 60px; height: 60px; object-fit: cover; border-radius: 0.5rem; border: 2px solid #e5e7eb; cursor: pointer; transition: transform 0.2s ease-in-out, box-shadow 0.2s ease-in-out; }
-        .image-thumbnail:hover { transform: scale(1.1); box-shadow: 0 4px 12px rgba(0,0,0,0.15); }
-        .notification-badge { position: absolute; top: -5px; right: -5px; width: 20px; height: 20px; border-radius: 50%; background-color: var(--theme-red); color: white; font-size: 12px; font-weight: 600; display: flex; align-items: center; justify-content: center; border: 2px solid white; }
-        #language-switcher button { padding: 4px 10px; font-size: 14px; border: 1px solid #d1d5db; background-color: #ffffff; border-radius: 8px; margin-right: 6px; transition: all 0.2s ease; font-weight: 500; }
-        #language-switcher button.active { background-color: var(--theme-primary); color: white; border-color: var(--theme-primary); font-weight: 600; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
-        #language-switcher button:not(.active):hover { background-color: #f9fafb; border-color: #a5b4fc; }
-        .form-input { display: block; width: 100%; border-radius: 0.375rem; border: 1px solid #d1d5db; padding: 0.5rem 0.75rem; background-color: #f9fafb; transition: border-color 0.2s, box-shadow 0.2s; }
-        .form-input:focus { outline: none; border-color: var(--theme-primary); box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.4); }
-        .radio-card { border: 2px solid #e5e7eb; transition: all 0.2s ease-in-out; }
-        .peer[value="outbound"]:checked + .radio-card { border-color: var(--theme-orange); background-color: #fff7ed; }
-        .peer[value="outbound"]:checked + .radio-card .radio-card-icon, .peer[value="outbound"]:checked + .radio-card .radio-card-text { color: var(--theme-orange); }
-        .peer[value="inbound"]:checked + .radio-card { border-color: var(--theme-green); background-color: #ecfdf5; }
-        .peer[value="inbound"]:checked + .radio-card .radio-card-icon, .peer[value="inbound"]:checked + .radio-card .radio-card-text { color: var(--theme-green); }
-        .log-card { transition: transform 0.2s, box-shadow 0.2s; }
-        .log-card:hover { transform: translateY(-3px); box-shadow: 0 4px 12px rgba(0,0,0,0.08); }
-        .modal .transform { transition: all 0.2s ease-out; }
-    </style>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Airnovation Service Report</title>
+  <meta name="theme-color" content="#f4f7fb" />
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Poppins:wght@600;700&display=swap" rel="stylesheet">
+  <style>
+    body { font-family: Inter, sans-serif; background:#f4f7fb; }
+    h1,h2,h3 { font-family:Poppins,sans-serif; }
+    .tab { flex:1; min-height:44px; border-radius:8px; font-weight:700; color:#475569; transition:.2s; }
+    .tab.active { background:#fff; color:#2563eb; box-shadow:0 1px 4px rgba(15,23,42,.12); }
+    .btn { display:inline-flex; align-items:center; justify-content:center; border-radius:8px; font-weight:700; padding:.7rem 1rem; transition:.2s; }
+    .btn:disabled { opacity:.55; cursor:not-allowed; }
+    .btn-primary { background:#2563eb; color:#fff; }
+    .btn-green { background:#059669; color:#fff; }
+    .btn-red { background:#dc2626; color:#fff; }
+    .field { width:100%; border:1px solid #cbd5e1; border-radius:7px; padding:.58rem .68rem; background:#fff; }
+    .field:focus { outline:2px solid rgba(37,99,235,.2); border-color:#2563eb; }
+    .card { background:#fff; border:1px solid #e2e8f0; border-radius:10px; box-shadow:0 1px 3px rgba(15,23,42,.06); }
+    .badge { display:inline-flex; border-radius:999px; padding:.2rem .6rem; font-size:.75rem; font-weight:700; }
+    .loader { width:18px; height:18px; border-radius:999px; border:3px solid rgba(255,255,255,.4); border-top-color:#fff; animation:spin 1s linear infinite; }
+    @keyframes spin { to { transform:rotate(360deg); } }
+    .signature { width:100%; height:110px; border:1px dashed #94a3b8; border-radius:7px; background:#f8fafc; touch-action:none; }
+    .report-paper { width:794px; max-width:100%; margin:auto; background:#fff; color:#111827; padding:28px; }
+    .report-table th,.report-table td { border:1px solid #64748b; padding:5px; vertical-align:top; }
+    .section-title { background:#475569; color:white; text-align:center; font-weight:700; padding:5px; letter-spacing:.12em; }
+    .line-input { border:0; border-bottom:1px solid #64748b; border-radius:0; padding:.2rem .3rem; background:transparent; }
+    @media (max-width:800px) { .report-paper { width:100%; padding:15px; } }
+  </style>
 </head>
-<body class="bg-gray-100">
-    <div class="container mx-auto max-w-4xl p-4 md:p-8">
-        <header class="text-center mb-8 relative">
-            <div id="language-switcher" class="absolute top-0 left-0 z-10"></div>
-            <h1 id="main-title" class="text-3xl md:text-4xl font-bold text-gray-800 pt-12"></h1>
-            <p id="company-name" class="text-gray-500 mt-2 font-medium tracking-wide">Airnovation Engineering Pte Ltd</p>
-        </header>
+<body>
+<main class="mx-auto max-w-6xl p-3 md:p-8">
+  <header class="mb-5 flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+    <div><h1 class="text-2xl md:text-4xl font-bold text-slate-800">Service Report</h1><p class="font-medium text-slate-500">Airnovation Engineering Pte Ltd Â· Browser-only test</p></div>
+    <div id="auth-state" class="text-sm font-semibold text-slate-500"></div>
+  </header>
+  <section class="rounded-xl bg-white p-2 shadow-lg shadow-slate-200/70">
+    <nav id="app-nav" class="hidden gap-1 rounded-lg bg-slate-100 p-1 sm:flex">
+      <button class="tab active" data-tab="form">Service Form</button>
+      <button class="tab" data-tab="logs">Log</button>
+      <button class="tab" data-tab="admin">Admin</button>
+    </nav>
+    <div id="view" class="min-h-[430px] p-2 md:p-5"></div>
+  </section>
+</main>
+<div id="notice" class="fixed inset-0 z-50 hidden items-center justify-center bg-black/60 p-4"><div class="card w-full max-w-md p-6"><p id="notice-text" class="whitespace-pre-line text-base font-semibold text-slate-800"></p><button class="btn btn-primary mt-5 w-full" onclick="closeNotice()">OK</button></div></div>
 
-        <div class="bg-white rounded-xl main-container">
-            <div class="p-2">
-                <nav class="bg-gray-100 p-1 rounded-lg flex space-x-1" aria-label="Tabs">
-                    <button data-tab="form" id="tab-form" class="tab-btn"></button>
-                    <button data-tab="request" id="tab-request" class="tab-btn"></button>
-                    <button data-tab="logs" id="tab-logs" class="tab-btn"></button>
-                    <button data-tab="admin" id="tab-admin" class="tab-btn relative">
-                        <span class="admin-button-text"></span>
-                        <span id="request-notification-badge" class="notification-badge hidden"></span>
-                    </button>
-                </nav>
-            </div>
-            <div id="app-content" class="min-h-[400px]"></div>
-        </div>
-    </div>
+<script>
+const STORAGE_KEY="airnovation_service_report_test_v1";
+let currentTab="form", reports=loadReports(), signaturePad=null;
+const view=document.getElementById("view"), appNav=document.getElementById("app-nav"), authState=document.getElementById("auth-state");
+const channel="BroadcastChannel" in window ? new BroadcastChannel("airnovation-service-report-test") : null;
 
-    <!-- Modals -->
-    <div id="notification-modal" class="modal fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center p-4 hidden z-50">
-        <div class="bg-white rounded-xl shadow-xl max-w-sm w-full p-6 text-center transform scale-95 opacity-0">
-            <p id="notification-message" class="text-lg text-gray-800"></p>
-            <button id="notification-ok-btn" onclick="hideModal('notification-modal')" class="mt-6 w-full btn btn-primary"></button>
-        </div>
-    </div>
-    <div id="password-modal" class="modal fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center p-4 hidden z-50">
-        <div class="bg-white rounded-xl shadow-xl max-w-sm w-full p-8 transform scale-95 opacity-0">
-            <h3 id="password-title" class="text-xl font-bold mb-4 text-gray-800 text-center"></h3>
-            <input type="password" id="password-input" class="form-input text-center text-lg tracking-widest">
-            <p id="password-error" class="text-red-500 text-sm mt-2 text-center hidden"></p>
-            <div class="flex justify-center space-x-4 mt-6">
-                <button id="password-cancel" class="btn bg-gray-200 text-gray-700 hover:bg-gray-300"></button>
-                <button id="password-submit" class="btn btn-primary"></button>
-            </div>
-        </div>
-    </div>
-    <div id="delete-confirm-modal" class="modal fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center p-4 hidden z-50">
-        <div class="bg-white rounded-xl shadow-xl max-w-sm w-full p-6 text-center transform scale-95 opacity-0">
-             <div class="mx-auto flex items-center justify-center h-12 w-12 rounded-full bg-red-100">
-                <span class="material-icons-outlined text-red-600">warning</span>
-            </div>
-            <p id="delete-confirm-message" class="text-lg text-gray-700 mt-4"></p>
-            <div class="flex justify-center space-x-4 mt-6">
-                <button id="delete-cancel-btn" class="btn bg-gray-200 text-gray-700 hover:bg-gray-300"></button>
-                <button id="delete-confirm-btn" class="btn bg-red-600 text-white hover:bg-red-700"></button>
-            </div>
-        </div>
-    </div>
-    <div id="image-lightbox-modal" class="modal fixed inset-0 bg-black bg-opacity-90 flex items-center justify-center p-4 hidden z-[60] cursor-pointer" onclick="hideModal('image-lightbox-modal')">
-        <img id="lightbox-image" src="" alt="Full size image view" class="rounded-lg shadow-2xl">
-    </div>
+authState.textContent="Local Test Mode Â· No Firebase Â· No login";
+appNav.classList.remove("hidden"); appNav.classList.add("flex");
+channel?.addEventListener("message",()=>{ reports=loadReports(); render(); });
+window.addEventListener("storage",e=>{ if(e.key===STORAGE_KEY){ reports=loadReports(); render(); } });
+function loadReports(){ try{return JSON.parse(localStorage.getItem(STORAGE_KEY)||"[]");}catch{return [];} }
+function saveReports(){ localStorage.setItem(STORAGE_KEY,JSON.stringify(reports)); channel?.postMessage("updated"); }
+function makeId(){ return crypto.randomUUID?.() || `local-${Date.now()}-${Math.random().toString(16).slice(2)}`; }
+document.querySelectorAll(".tab").forEach(b=>b.onclick=()=>setTab(b.dataset.tab));
+function setTab(tab){ currentTab=tab; document.querySelectorAll(".tab").forEach(b=>b.classList.toggle("active",b.dataset.tab===tab)); render(); }
+function render(){ if(currentTab==="form") renderForm(); if(currentTab==="logs") renderLogs(); if(currentTab==="admin") renderAdmin(); }
 
-    <script type="module">
-        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-        import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-        import { getFirestore, collection, addDoc, query, onSnapshot, serverTimestamp, doc, deleteDoc, updateDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
-        
-        const translations = {
-            en: {
-                title: "Inventory & Material Request", tab_form: "Stock In/Out", tab_request: "Material Request", tab_logs: "Log", tab_admin_login: "Admin Login", tab_admin_logout: "Logout", action_type: "Action Type", outbound: "Outbound", inbound: "Inbound", fill_details: "Fill Details", item_name: "Item Name", quantity: "Quantity", dept_pic: "Dept./PIC", location: "Location", photo_optional: "Photo (Optional)", upload_image: "Upload Image", submit: "Submit", request_form_title: "Material Request Form", pic_name: "PIC Name", used_for: "Used For", material_name: "Material Name", date_needed: "Date Needed (Optional)", delivery_address: "Delivery Address", submit_request: "Submit Request", activity_log: "Activity Log", no_records: "No Records Found", request_mgmt: "Material Request Management", no_requests: "No Pending Requests", ok: "OK", password_title: "Admin Password", password_error: "Wrong Password.", cancel: "Cancel", confirm: "Confirm", delete_confirm_msg: "Are you sure you want to delete this item?", delete: "Delete", by: "By:", loc: "Location:", img: "Image:", status_new: "New", status_processing: "Processing", status_completed: "Completed", qty: "Qty:", for: "For:", to: "To:", date_needed_label: "Date Needed:", eta_label: "ETA:", process: "Process", complete: "Complete",
-                notify_record_submitted: "Record submitted successfully!", notify_submission_failed: "Submission failed.", notify_request_submitted: "Request submitted successfully!", notify_admin_logout: "Logged out from admin mode.", notify_admin_login: "Admin mode enabled.", notify_item_deleted: "Item deleted.", notify_delete_failed: "Deletion failed.", notify_update_failed: "Update failed.", notify_eta_update_failed: "ETA update failed."
-            },
-            zh: {
-                title: "库存与物料申请", tab_form: "出入库", tab_request: "物料申请", tab_logs: "日志", tab_admin_login: "管理员登录", tab_admin_logout: "登出", action_type: "操作类型", outbound: "出库", inbound: "入库", fill_details: "填写信息", item_name: "物品名称", quantity: "数量", dept_pic: "部门/负责人", location: "地点", photo_optional: "照片 (可选)", upload_image: "上传图片", submit: "提交", request_form_title: "物料申请表", pic_name: "负责人名字", used_for: "用途", material_name: "材料名称", date_needed: "期望日期 (可选)", delivery_address: "送货地址", submit_request: "提交申请", activity_log: "操作日志", no_records: "没有记录", request_mgmt: "物料申请管理", no_requests: "没有申请", ok: "好的", password_title: "管理员密码", password_error: "密码错误。", cancel: "取消", confirm: "确认", delete_confirm_msg: "确定要删除这条记录吗?", delete: "删除", by: "负责人:", loc: "地点:", img: "图片:", status_new: "新申请", status_processing: "处理中", status_completed: "已完成", qty: "数量:", for: "用途:", to: "送至:", date_needed_label: "期望日期:", eta_label: "预计到达:", process: "处理", complete: "完成",
-                notify_record_submitted: "记录提交成功！", notify_submission_failed: "提交失败。", notify_request_submitted: "申请提交成功！", notify_admin_logout: "已退出管理员模式。", notify_admin_login: "已进入管理员模式。", notify_item_deleted: "记录已删除。", notify_delete_failed: "删除失败。", notify_update_failed: "更新失败。", notify_eta_update_failed: "预计到达日期更新失败。"
-            },
-            ta: {
-                title: "சரக்கு & பொருள் கோரிக்கை", tab_form: "கையிருப்பு உள்ளே/வெளியே", tab_request: "பொருள் கோரிக்கை", tab_logs: "பதிவு", tab_admin_login: "நிர்வாகி உள்நுழைவு", tab_admin_logout: "வெளியேறு", action_type: "செயல் வகை", outbound: "வெளிச்செல்லும்", inbound: "உள்வரும்", fill_details: "விவரங்களை நிரப்பவும்", item_name: "பொருள் பெயர்", quantity: "அளவு", dept_pic: "துறை/பொறுப்பாளர்", location: "இடம்", photo_optional: "புகைப்படம் (விருப்பத்தேர்வு)", upload_image: "படத்தைப் பதிவேற்றவும்", submit: "சமர்ப்பிக்கவும்", request_form_title: "பொருள் கோரிக்கை படிவம்", pic_name: "பொறுப்பாளர் பெயர்", used_for: "பயன்பாடு", material_name: "பொருள் பெயர்", date_needed: "தேவைப்படும் தேதி (விருப்பத்தேர்வு)", delivery_address: "விநியோக முகவரி", submit_request: "கோரிக்கையைச் சமர்ப்பிக்கவும்", activity_log: "செயல்பாட்டு பதிவு", no_records: "பதிவுகள் இல்லை", request_mgmt: "பொருள் கோரிக்கை மேலாண்மை", no_requests: "கோரிக்கைகள் இல்லை", ok: "சரி", password_title: "நிர்வாகி கடவுச்சொல்", password_error: "தவறான கடவுச்சொல்.", cancel: "ரத்துசெய்", confirm: "உறுதிப்படுத்தவும்", delete_confirm_msg: "இந்த உருப்படியை நீக்க விரும்புகிறீர்களா?", delete: "நீக்கு", by: "அனுப்புநர்:", loc: "இடம்:", img: "படம்:", status_new: "புதியது", status_processing: "செயலாக்கத்தில்", status_completed: "முடிந்தது", qty: "அளவு:", for: "இதற்காக:", to: "பெறுநர்:", date_needed_label: "தேவைப்படும் தேதி:", eta_label: "ETA:", process: "செயலாக்கு", complete: "முடி",
-                notify_record_submitted: "பதிவு வெற்றிகரமாக சமர்ப்பிக்கப்பட்டது!", notify_submission_failed: "சமர்ப்பிப்பு தோல்வியடைந்தது.", notify_request_submitted: "கோரிக்கை வெற்றிகரமாக சமர்ப்பிக்கப்பட்டது!", notify_admin_logout: "நிர்வாகி பயன்முறையிலிருந்து வெளியேறப்பட்டது.", notify_admin_login: "நிர்வாகி பயன்முறை இயக்கப்பட்டது.", notify_item_deleted: "உருப்படி நீக்கப்பட்டது.", notify_delete_failed: "நீக்குதல் தோல்வியடைந்தது.", notify_update_failed: "புதுப்பித்தல் தோல்வியடைந்தது.", notify_eta_update_failed: "ETA புதுப்பித்தல் தோல்வியடைந்தது."
-            },
-        };
+function renderForm(){
+view.innerHTML=`<form id="service-form" class="space-y-4">
+<div id="print-area" class="report-paper shadow-sm">
+  <div class="flex justify-between gap-4"><div><h2 class="text-3xl font-bold"><span class="text-red-600">AIR</span>NOVATION</h2><p class="text-sm font-bold tracking-widest">ENGINEERING PTE LTD</p><p class="mt-2 text-xs">48 Toh Guan Road East #07-112 Enterprise Hub Singapore 608586<br>Email: contact@airnovation.com.sg | Tel: 6515 4665</p></div><div class="w-72 text-sm space-y-2"><label class="flex gap-2">Date <input id="serviceDate" type="date" class="field line-input" required></label><label class="flex gap-2">Technician <input id="techName" class="field line-input" required></label><label class="flex gap-2">Time In <input id="timeIn" type="time" class="field line-input" required></label><label class="flex gap-2">Time Out <input id="timeOut" type="time" class="field line-input" required></label></div></div>
+  <div class="section-title mt-5">SERVICE REPORT</div>
+  <div class="grid gap-3 py-4 text-sm md:grid-cols-2"><label>Client<input id="clientName" class="field mt-1" required></label><label>Customer Email<input id="customerEmail" type="email" class="field mt-1"></label><label class="md:col-span-2">Address<input id="address" class="field mt-1" required></label><label>Brand<input id="brand" class="field mt-1"></label><label>Model<input id="model" class="field mt-1"></label><label>Serial No.<input id="serialNo" class="field mt-1"></label><label>Quotation / Invoice No.<input id="referenceNo" class="field mt-1"></label></div>
+  <div class="section-title">SECTION A</div>
+  <div class="space-y-3 py-4 text-sm"><label class="block">Complaint<textarea id="complaints" class="field mt-1" rows="2" required></textarea></label><label class="block">Report<textarea id="reportText" class="field mt-1" rows="3" required></textarea></label><label class="block">Recommendation<textarea id="recommendation" class="field mt-1" rows="2"></textarea></label></div>
+  <div class="section-title">SECTION B</div>
+  <div class="overflow-x-auto py-3"><table class="report-table w-full min-w-[620px] text-sm"><thead><tr><th>Description</th><th class="w-24">Qty</th><th class="w-24">Unit</th><th class="w-28">Unit Price</th><th class="w-28">Amount</th><th class="no-pdf w-20">Action</th></tr></thead><tbody id="items"></tbody></table><button id="addItem" type="button" class="btn mt-2 bg-slate-200 px-3 py-2 text-slate-700 no-pdf">+ Add Row</button></div>
+  <div class="grid gap-3 text-sm md:grid-cols-3"><label>Labour<input id="labour" type="number" step="0.01" class="field mt-1 money"></label><label>Transport<input id="transport" type="number" step="0.01" class="field mt-1 money"></label><label>GST %<input id="gstRate" type="number" step="0.01" value="9" class="field mt-1 money"></label></div>
+  <div class="mt-3 ml-auto max-w-sm text-sm"><div class="flex justify-between"><span>Parts</span><strong id="partsDisplay">$0.00</strong></div><div class="flex justify-between"><span>GST</span><strong id="gstDisplay">$0.00</strong></div><div class="flex justify-between border-t mt-1 pt-1 text-base"><span>Total</span><strong id="totalDisplay">$0.00</strong></div></div>
+  <div class="mt-5 grid gap-4 border-t pt-4 text-sm md:grid-cols-2"><div><label>Customer Name<input id="signName" class="field mt-1" required></label><label class="mt-3 block">Designation<input id="designation" class="field mt-1"></label><label class="mt-3 flex items-start gap-2"><input id="ack" type="checkbox" class="mt-1" required><span>I acknowledge that the service details above are correct and that the work performed has been explained to me.</span></label></div><div><div class="mb-1 flex justify-between"><strong>Customer Signature</strong><button id="clearSignature" type="button" class="text-xs font-bold text-blue-600 no-pdf">Clear</button></div><canvas id="signature" class="signature"></canvas></div></div>
+  <p class="mt-5 text-[9px]">This service report records the work performed and customer acknowledgement. Final records are stored in the company system.</p>
+</div>
+<div class="mx-auto flex max-w-3xl flex-col gap-3 sm:flex-row"><button id="finalize" class="btn btn-green flex-1" type="submit"><span>Finalize & Lock</span><span class="loader ml-3 hidden"></span></button><button type="button" class="btn bg-slate-200 text-slate-700" onclick="document.getElementById('service-form').reset(); window.resetSignature();">Clear Form</button></div>
+</form>`;
+  document.getElementById("serviceDate").value=new Date().toISOString().slice(0,10); addItemRow();
+  document.getElementById("addItem").onclick=addItemRow; document.querySelectorAll(".money").forEach(x=>x.oninput=calculateTotals);
+  initSignature(); document.getElementById("clearSignature").onclick=()=>signaturePad.clear();
+  document.getElementById("service-form").onsubmit=submitReport;
+}
+function addItemRow(){ const body=document.getElementById("items"); const tr=document.createElement("tr"); tr.innerHTML=`<td><input class="desc w-full"></td><td><input class="qty w-full text-center" type="number" min="0" step="0.01"></td><td><input class="unit w-full text-center"></td><td><input class="price w-full text-right" type="number" min="0" step="0.01"></td><td><input class="amount w-full text-right" readonly></td><td class="no-pdf text-center"><button type="button" class="remove text-red-600 font-bold">Remove</button></td>`; tr.querySelectorAll(".qty,.price").forEach(x=>x.oninput=calculateTotals); tr.querySelector(".remove").onclick=()=>{ if(body.children.length>1){tr.remove();calculateTotals();} }; body.appendChild(tr); }
+function collectItems(){ return [...document.querySelectorAll("#items tr")].map(r=>({description:r.querySelector(".desc").value.trim(),quantity:Number(r.querySelector(".qty").value)||0,unit:r.querySelector(".unit").value.trim(),unitPrice:Number(r.querySelector(".price").value)||0})).filter(x=>x.description); }
+function calculateTotals(){ let parts=0; document.querySelectorAll("#items tr").forEach(r=>{const a=(Number(r.querySelector(".qty").value)||0)*(Number(r.querySelector(".price").value)||0); r.querySelector(".amount").value=a?a.toFixed(2):""; parts+=a;}); const labour=Number(document.getElementById("labour")?.value)||0, transport=Number(document.getElementById("transport")?.value)||0, rate=Number(document.getElementById("gstRate")?.value)||0, gst=(parts+labour+transport)*rate/100, total=parts+labour+transport+gst; document.getElementById("partsDisplay").textContent=`$${parts.toFixed(2)}`; document.getElementById("gstDisplay").textContent=`$${gst.toFixed(2)}`; document.getElementById("totalDisplay").textContent=`$${total.toFixed(2)}`; return {parts,labour,transport,gstRate:rate,gst,total}; }
+function initSignature(){ const canvas=document.getElementById("signature"), ctx=canvas.getContext("2d"); const resize=()=>{const old=canvas.toDataURL(); canvas.width=canvas.clientWidth*devicePixelRatio; canvas.height=canvas.clientHeight*devicePixelRatio; ctx.scale(devicePixelRatio,devicePixelRatio); ctx.lineWidth=2;ctx.lineCap="round";ctx.strokeStyle="#000080"; if(signaturePad?.hasInk){const img=new Image();img.onload=()=>ctx.drawImage(img,0,0,canvas.clientWidth,canvas.clientHeight);img.src=old;}}; let drawing=false,last=null,hasInk=false; resize(); const pos=e=>{const r=canvas.getBoundingClientRect(),p=e.touches?.[0]||e;return{x:p.clientX-r.left,y:p.clientY-r.top}}; const start=e=>{drawing=true;last=pos(e);}; const move=e=>{if(!drawing)return;e.preventDefault();const p=pos(e);ctx.beginPath();ctx.moveTo(last.x,last.y);ctx.lineTo(p.x,p.y);ctx.stroke();last=p;hasInk=true;signaturePad.hasInk=true;}; const stop=()=>drawing=false; ["mousedown","touchstart"].forEach(n=>canvas.addEventListener(n,start,{passive:false})); ["mousemove","touchmove"].forEach(n=>canvas.addEventListener(n,move,{passive:false})); ["mouseup","mouseout","touchend"].forEach(n=>canvas.addEventListener(n,stop)); signaturePad={hasInk:false,clear(){ctx.clearRect(0,0,canvas.width,canvas.height);this.hasInk=false;},data(){return canvas.toDataURL("image/png");}}; }
+window.resetSignature=()=>signaturePad?.clear();
+async function submitReport(e){
+  e.preventDefault();
+  const form=e.currentTarget;
+  const button=document.getElementById("finalize");
+  if(!form.reportValidity()) return;
+  if(!signaturePad?.hasInk){showNotice("Customer signature is required.");return;}
+  setLoading(button,true);
+  try{
+    const items=collectItems();
+    const totals=calculateTotals();
+    const client=document.getElementById("clientName").value.trim();
+    const serviceDate=document.getElementById("serviceDate").value;
+    const tempNo=`SR-${serviceDate.replaceAll("-","")}-${Date.now().toString().slice(-6)}`;
+    const payload={
+      reportNo:tempNo,
+      client,
+      customerEmail:document.getElementById("customerEmail").value.trim(),
+      address:document.getElementById("address").value.trim(),
+      brand:document.getElementById("brand").value.trim(),
+      model:document.getElementById("model").value.trim(),
+      serialNo:document.getElementById("serialNo").value.trim(),
+      referenceNo:document.getElementById("referenceNo").value.trim(),
+      serviceDate,
+      technician:document.getElementById("techName").value.trim(),
+      timeIn:document.getElementById("timeIn").value,
+      timeOut:document.getElementById("timeOut").value,
+      complaints:document.getElementById("complaints").value.trim(),
+      report:document.getElementById("reportText").value.trim(),
+      recommendation:document.getElementById("recommendation").value.trim(),
+      items,
+      totals,
+      customerName:document.getElementById("signName").value.trim(),
+      designation:document.getElementById("designation").value.trim(),
+      signatureData:signaturePad.data(),
+      status:"submitted",
+      pdfStatus:"on_demand",
+      submittedBy:"Local Test User",
+      submitterId:"local-test",
+      timestamp:new Date().toISOString()
+    };
+    payload.id=makeId();
+    reports.unshift(payload);
+    saveReports();
+    form.reset();
+    signaturePad.clear();
+    showNotice(`Report ${tempNo} submitted successfully.\nIt is now visible in the shared Log.`);
+    setTimeout(()=>setTab("logs"),500);
+  }catch(err){
+    console.error(err);
+    showNotice("Submission failed. The form has not been cleared.\n\n"+formatError(err));
+  }finally{
+    setLoading(button,false);
+  }
+}
 
-        const firebaseConfig = {
-            apiKey: "AIzaSyBZ0-KPzLs13U7uG0KIqiYbKdbOBqVT7cQ",
-            authDomain: "airnovation-inventory.firebaseapp.com",
-            projectId: "airnovation-inventory",
-            storageBucket: "airnovation-inventory.firebasestorage.app",
-            messagingSenderId: "273073947687",
-            appId: "1:273073947687:web:2bd59cddbf675526747a02",
-            measurementId: "G-MV1LH9X1DD"
-        };
-        
-        let app, db, auth, userId, isAdmin = false, inventoryLogs = [], materialRequests = [], currentTab = 'form', currentLanguage = 'en';
+function buildPrintableReport(r){
+  const itemRows=(r.items||[]).length
+    ? r.items.map(i=>`<tr><td>${escapeHtml(i.description||"")}</td><td>${escapeHtml(i.quantity||"")}</td><td>${escapeHtml(i.unit||"")}</td><td class="num">${money(i.unitPrice)}</td><td class="num">${money((Number(i.quantity)||0)*(Number(i.unitPrice)||0))}</td></tr>`).join("")
+    : `<tr><td colspan="5" style="height:34px"></td></tr>`;
+  const t=r.totals||{};
+  return `<div class="pdf-sheet">
+    <div class="pdf-head"><div><h1><span>AIR</span>NOVATION</h1><b>ENGINEERING PTE LTD</b><p>48 Toh Guan Road East #07-112 Enterprise Hub Singapore 608586<br>contact@airnovation.com.sg Â· 6515 4665</p></div><div class="meta"><b>${escapeHtml(r.reportNo||"")}</b><p>Date: ${escapeHtml(r.serviceDate||"")}<br>Technician: ${escapeHtml(r.technician||"")}<br>Time: ${escapeHtml(r.timeIn||"")} to ${escapeHtml(r.timeOut||"")}</p></div></div>
+    <h2>SERVICE REPORT</h2>
+    <table><tr><th>Client</th><td>${escapeHtml(r.client||"")}</td><th>Email</th><td>${escapeHtml(r.customerEmail||"")}</td></tr><tr><th>Address</th><td colspan="3">${escapeHtml(r.address||"")}</td></tr><tr><th>Brand / Model</th><td>${escapeHtml([r.brand,r.model].filter(Boolean).join(" / "))}</td><th>Serial / Ref.</th><td>${escapeHtml([r.serialNo,r.referenceNo].filter(Boolean).join(" / "))}</td></tr></table>
+    <h2>SECTION A</h2>
+    <table><tr><th>Complaint</th><td>${nl2br(r.complaints)}</td></tr><tr><th>Report</th><td>${nl2br(r.report)}</td></tr><tr><th>Recommendation</th><td>${nl2br(r.recommendation)}</td></tr></table>
+    <h2>SECTION B</h2>
+    <table><thead><tr><th>Description</th><th>Qty</th><th>Unit</th><th>Unit Price</th><th>Amount</th></tr></thead><tbody>${itemRows}</tbody></table>
+    <div class="totals"><p>Parts: <b>${money(t.parts)}</b></p><p>Labour: <b>${money(t.labour)}</b></p><p>Transport: <b>${money(t.transport)}</b></p><p>GST: <b>${money(t.gst)}</b></p><p>Total: <b>${money(t.total)}</b></p></div>
+    <div class="sign"><div><b>Customer Name:</b> ${escapeHtml(r.customerName||"")}<br><b>Designation:</b> ${escapeHtml(r.designation||"")}</div><div><b>Customer Signature</b>${r.signatureData?`<img src="${r.signatureData}" alt="Signature">`:""}</div></div>
+    <p class="foot">Submitted: ${formatTime(r.timestamp)} Â· Status: ${statusLabel(r.status)}</p>
+  </div>`;
+}
+function pdfStyles(){return `<style>
+  body{font-family:Arial,sans-serif;color:#111;margin:0}.pdf-sheet{width:190mm;padding:8mm;background:white;font-size:11px}.pdf-head{display:flex;justify-content:space-between;gap:20px}.pdf-head h1{margin:0;font-size:26px}.pdf-head h1 span{color:#dc2626}.pdf-head p,.meta p{font-size:9px;line-height:1.4}.meta{text-align:right}.pdf-sheet h2{background:#475569;color:#fff;text-align:center;font-size:12px;letter-spacing:2px;padding:5px;margin:10px 0 4px}.pdf-sheet table{width:100%;border-collapse:collapse}.pdf-sheet th,.pdf-sheet td{border:1px solid #555;padding:5px;vertical-align:top}.pdf-sheet th{background:#f1f5f9;text-align:left}.num{text-align:right}.totals{margin-left:auto;width:230px;margin-top:8px}.totals p{display:flex;justify-content:space-between;margin:3px 0}.sign{display:grid;grid-template-columns:1fr 1fr;gap:20px;border-top:1px solid #777;margin-top:14px;padding-top:10px}.sign img{display:block;max-width:240px;max-height:90px;margin-top:5px}.foot{font-size:8px;margin-top:12px;color:#555}
+</style>`}
+function money(v){return `$${(Number(v)||0).toFixed(2)}`}
+function nl2br(v){return escapeHtml(v||"").replaceAll("\n","<br>")}
+async function downloadReportPdf(r){
+  const host=document.createElement("div"); host.style.position="fixed";host.style.left="-10000px";host.innerHTML=pdfStyles()+buildPrintableReport(r);document.body.appendChild(host);
+  try{await html2pdf().set({margin:0,filename:`${r.reportNo||"service-report"}.pdf`,image:{type:"jpeg",quality:.96},html2canvas:{scale:2,useCORS:true},jsPDF:{unit:"mm",format:"a4",orientation:"portrait"}}).from(host.querySelector(".pdf-sheet")).save();}
+  catch(err){showNotice("PDF generation failed: "+formatError(err));}
+  finally{host.remove();}
+}
+function printReport(r){
+  const w=window.open("","_blank"); if(!w){showNotice("Please allow pop-ups to print.");return;}
+  w.document.write(`<!doctype html><html><head><title>${escapeHtml(r.reportNo||"Service Report")}</title>${pdfStyles()}</head><body>${buildPrintableReport(r)}<script>window.onload=()=>{window.print()}<\/script></body></html>`);w.document.close();
+}
 
-        try {
-            app = initializeApp(firebaseConfig);
-            db = getFirestore(app);
-            auth = getAuth(app);
-        } catch (e) { console.error("Firebase Init Failed:", e); alert("System initialization failed."); }
-        
-        const setLanguage = (lang) => { currentLanguage = lang; renderAll(); document.querySelectorAll('#language-switcher button').forEach(btn => btn.classList.toggle('active', btn.dataset.lang === lang)); };
-        const t = (key) => translations[currentLanguage][key] || key;
-        const showModal = (id) => { const el = document.getElementById(id); if(!el) return; el.classList.remove('hidden'); setTimeout(() => { const transformDiv = el.querySelector('.transform'); if(transformDiv) transformDiv.classList.remove('scale-95', 'opacity-0'); }, 10); };
-        const hideModal = (id) => { const el = document.getElementById(id); if(!el) return; const transformDiv = el.querySelector('.transform'); if(transformDiv) transformDiv.classList.add('scale-95', 'opacity-0'); setTimeout(() => el.classList.add('hidden'), 200); };
-        window.hideModal = hideModal;
-        const showNotification = (key) => { const msgEl = document.getElementById('notification-message'); const okBtn = document.getElementById('notification-ok-btn'); if(msgEl) msgEl.textContent = t(key); if(okBtn) okBtn.textContent = t('ok'); showModal('notification-modal'); };
-        const formatTimestamp = (ts) => ts ? ts.toDate().toLocaleString('en-SG', { hour12: false, year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' }) : 'Unknown';
-        const resizeImage = (base64, maxW = 800, maxH = 800) => new Promise(res => {
-            const img = new Image();
-            img.src = base64;
-            img.onload = () => {
-                const canvas = document.createElement('canvas');
-                let { width, height } = img;
-                if (width > height) {
-                    if (width > maxW) { height *= maxW / width; width = maxW; }
-                } else {
-                    if (height > maxH) { width *= maxH / height; height = maxH; }
-                }
-                canvas.width = width; canvas.height = height;
-                canvas.getContext('2d').drawImage(img, 0, 0, width, height);
-                res(canvas.toDataURL('image/jpeg', 0.7));
-            };
-            img.onerror = () => res(null);
-        });
-        
-        onAuthStateChanged(auth, async (user) => {
-            if (user) {
-                userId = user.uid;
-                if (!db) return;
-                const appId = "inventory-tracker-app-dev";
-                onSnapshot(query(collection(db, `artifacts/${appId}/public/data/inventory_logs`)), snap => { inventoryLogs = snap.docs.map(d => ({ id: d.id, ...d.data() })); renderAll(); });
-                onSnapshot(query(collection(db, `artifacts/${appId}/public/data/material_requests`)), snap => { materialRequests = snap.docs.map(d => ({ id: d.id, ...d.data() })); renderAll(); });
-            } else {
-                const token = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
-                if (token) {
-                    try {
-                        await signInWithCustomToken(auth, token);
-                    } catch (e) {
-                        if (e.code === 'auth/custom-token-mismatch') {
-                            console.log("Custom token mismatch detected. Falling back to anonymous sign-in.");
-                            await signInAnonymously(auth).catch(anonError => {
-                                console.error("Fallback anonymous sign-in failed:", anonError);
-                                showNotification("Cannot connect to service.");
-                            });
-                        } else {
-                            console.error("An unexpected authentication error occurred:", e);
-                            showNotification("Cannot connect to service.");
-                        }
-                    }
-                } else {
-                    try {
-                        await signInAnonymously(auth);
-                    } catch (e) {
-                        console.error("Anonymous sign-in failed:", e);
-                        showNotification("Cannot connect to service.");
-                    }
-                }
-            }
-        });
-
-        const TEMPLATES = {
-            form: () => `<form id="inventory-form" class="p-6 md:p-8 space-y-8"><div><label class="block text-base font-semibold text-gray-800 mb-3">${t('action_type')}</label><div class="grid grid-cols-2 gap-4"><label><input type="radio" name="action_type" value="outbound" class="sr-only peer"><div class="p-4 flex flex-col items-center justify-center text-gray-600 bg-white rounded-lg radio-card cursor-pointer"><span class="material-icons-outlined text-3xl radio-card-icon outbound">file_upload</span><p class="font-semibold mt-2 radio-card-text">${t('outbound')}</p></div></label><label><input type="radio" name="action_type" value="inbound" class="sr-only peer" checked><div class="p-4 flex flex-col items-center justify-center text-gray-600 bg-white rounded-lg radio-card cursor-pointer"><span class="material-icons-outlined text-3xl radio-card-icon inbound">file_download</span><p class="font-semibold mt-2 radio-card-text">${t('inbound')}</p></div></label></div></div><div><label class="block text-base font-semibold text-gray-800 mb-3">${t('fill_details')}</label><div class="space-y-4"><div><label for="item-name" class="block text-sm font-medium text-gray-600 mb-1">${t('item_name')} <span class="text-red-500">*</span></label><input type="text" id="item-name" required class="form-input"></div><div><label for="quantity" class="block text-sm font-medium text-gray-600 mb-1">${t('quantity')} <span class="text-red-500">*</span></label><input type="number" id="quantity" required class="form-input"></div><div><label for="department-head" class="block text-sm font-medium text-gray-600 mb-1">${t('dept_pic')} <span class="text-red-500">*</span></label><input type="text" id="department-head" required class="form-input"></div><div><label for="location" class="block text-sm font-medium text-gray-600 mb-1">${t('location')}</label><input type="text" id="location" class="form-input"></div><div class="pt-2"><label class="block text-sm font-medium text-gray-600 mb-2">${t('photo_optional')}</label><label for="logging-item-photo" class="w-full flex items-center justify-center px-4 py-6 bg-gray-50 text-gray-500 rounded-lg border-2 border-dashed border-gray-300 cursor-pointer hover:bg-blue-50 hover:border-blue-500 hover:text-blue-600 transition-colors"><span class="material-icons-outlined text-3xl">add_a_photo</span><span id="logging-photo-label" class="ml-3 text-base">${t('upload_image')}</span></label><input type="file" id="logging-item-photo" accept="image/*" capture="environment"><img id="logging-photo-preview" class="mt-4 rounded-lg hidden image-thumbnail" alt="Logging Photo Preview"/></div></div></div><button type="submit" class="w-full btn btn-primary"><span>${t('submit')}</span><div class="loader hidden ml-3"></div></button></form>`,
-            request: () => `<form id="material-request-form" class="p-6 md:p-8"><h2 class="text-2xl font-bold text-gray-800 mb-6 text-center">${t('request_form_title')}</h2><div class="space-y-4"><div><label for="request-person-in-charge" class="block text-sm font-medium text-gray-600 mb-1">${t('pic_name')} <span class="text-red-500">*</span></label><input type="text" id="request-person-in-charge" required class="form-input"></div><div><label for="request-purpose" class="block text-sm font-medium text-gray-600 mb-1">${t('used_for')} <span class="text-red-500">*</span></label><input type="text" id="request-purpose" required class="form-input"></div><div><label for="request-material-name" class="block text-sm font-medium text-gray-600 mb-1">${t('material_name')} <span class="text-red-500">*</span></label><input type="text" id="request-material-name" required class="form-input"></div><div><label for="request-quantity" class="block text-sm font-medium text-gray-600 mb-1">${t('quantity')} <span class="text-red-500">*</span></label><input type="number" id="request-quantity" required class="form-input"></div><div><label for="request-date-needed" class="block text-sm font-medium text-gray-600 mb-1">${t('date_needed')}</label><input type="date" id="request-date-needed" class="form-input"></div><div><label for="request-delivery-address" class="block text-sm font-medium text-gray-600 mb-1">${t('delivery_address')} <span class="text-red-500">*</span></label><input type="text" id="request-delivery-address" required class="form-input"></div><div class="pt-2"><label class="block text-sm font-medium text-gray-600 mb-2">${t('photo_optional')}</label><label for="request-item-photo" class="w-full flex items-center justify-center px-4 py-6 bg-gray-50 text-gray-500 rounded-lg border-2 border-dashed border-gray-300 cursor-pointer hover:bg-green-50 hover:border-green-500 hover:text-green-600 transition-colors"><span class="material-icons-outlined text-3xl">add_a_photo</span><span id="request-photo-label" class="ml-3 text-base">${t('upload_image')}</span></label><input type="file" id="request-item-photo" accept="image/*" capture="environment"><img id="request-photo-preview" class="mt-4 rounded-lg hidden image-thumbnail" alt="Request Photo Preview"/></div></div><button type="submit" class="w-full btn btn-green mt-8"><span>${t('submit_request')}</span><div class="loader hidden ml-3"></div></button></form>`,
-            logs: () => `<div class="p-4 md:p-6"><h2 class="text-2xl font-bold text-gray-800 mb-4 px-2">${t('activity_log')}</h2><div id="log-container" class="space-y-3"></div></div>`,
-            admin: () => `<div class="p-4 md:p-6"><h2 class="text-2xl font-bold text-gray-800 mb-4 px-2">${t('request_mgmt')}</h2><div id="request-log-container" class="space-y-3"></div></div>`,
-        };
-        
-        function updateTabStyles() {
-            document.querySelectorAll('.tab-btn').forEach(btn => {
-                const tab = btn.dataset.tab;
-                if (tab === currentTab) {
-                    btn.classList.add('active', 'bg-white', 'text-blue-600', 'shadow-sm');
-                    btn.classList.remove('text-gray-600', 'hover:bg-gray-200');
-                } else {
-                    btn.classList.remove('active', 'bg-white', 'text-blue-600', 'shadow-sm');
-                    btn.classList.add('text-gray-600', 'hover:bg-gray-200');
-                }
-            });
-        }
-        
-        function renderStaticText() {
-            document.getElementById('main-title').textContent = t('title');
-            document.getElementById('tab-form').textContent = t('tab_form');
-            document.getElementById('tab-request').textContent = t('tab_request');
-            document.getElementById('tab-logs').textContent = t('tab_logs');
-            document.querySelector('#tab-admin .admin-button-text').textContent = isAdmin ? t('tab_admin_logout') : t('tab_admin_login');
-        }
-
-        function renderAll() {
-            if (!document.getElementById('app-content')) return;
-            renderStaticText();
-            updateTabStyles();
-            
-            const container = document.getElementById('app-content');
-            container.innerHTML = TEMPLATES[currentTab] ? TEMPLATES[currentTab]() : '';
-
-            if (currentTab === 'logs') renderLogs();
-            if (currentTab === 'admin') renderAdmin();
-            
-            const newRequestCount = materialRequests.filter(req => req.status === 'new').length;
-            const badge = document.getElementById('request-notification-badge');
-            badge.textContent = newRequestCount;
-            badge.classList.toggle('hidden', newRequestCount === 0 || isAdmin);
-        }
-
-        function renderLogs() {
-            const logContainer = document.getElementById('log-container');
-            if(!logContainer) return;
-            logContainer.innerHTML = '';
-            const combinedLogs = [...inventoryLogs, ...materialRequests].sort((a, b) => (b.timestamp?.toMillis() || 0) - (a.timestamp?.toMillis() || 0));
-            if (combinedLogs.length === 0) {
-                logContainer.innerHTML = `<div class="text-center text-gray-500 py-16"><span class="material-icons-outlined text-5xl text-gray-400">inventory_2</span><p class="mt-4">${t('no_records')}</p></div>`;
-            } else {
-                combinedLogs.forEach(item => logContainer.appendChild(item.status ? createRequestCard(item) : createLogCard(item)));
-            }
-        }
-
-        function renderAdmin() {
-            const requestContainer = document.getElementById('request-log-container');
-            if(!requestContainer) return;
-            requestContainer.innerHTML = '';
-            const pendingRequests = materialRequests.sort((a,b) => {
-                const statusOrder = { 'new': 1, 'processing': 2, 'completed': 3 };
-                return (statusOrder[a.status] || 4) - (statusOrder[b.status] || 4);
-            });
-            if (pendingRequests.length === 0) {
-                requestContainer.innerHTML = `<div class="text-center text-gray-500 py-16"><span class="material-icons-outlined text-5xl text-gray-400">task_alt</span><p class="mt-4">${t('no_requests')}</p></div>`;
-            } else {
-                pendingRequests.forEach(req => requestContainer.appendChild(createRequestCard(req)));
-            }
-        }
-
-        function createLogCard(log) {
-            const el = document.createElement('div');
-            const isOutbound = log.type === 'outbound';
-            const borderColor = isOutbound ? 'border-orange-400' : 'border-green-400';
-            el.className = `p-4 rounded-lg shadow-sm bg-white border-l-4 ${borderColor} log-card`;
-            const imgHTML = log.imageDataURL ? `<div class="mt-3"><img src="${log.imageDataURL}" class="image-thumbnail" alt="Log Image"></div>` : '';
-            const adminDelete = isAdmin ? `<div class="mt-3 pt-3 border-t border-gray-100 text-right"><button data-id="${log.id}" data-type="log" class="delete-btn text-gray-400 hover:text-red-600 transition-colors"><span class="material-icons-outlined">delete</span></button></div>` : '';
-            const icon = isOutbound ? `<span class="material-icons-outlined text-orange-500">file_upload</span>` : `<span class="material-icons-outlined text-green-500">file_download</span>`;
-            el.innerHTML = `<div class="flex justify-between items-start"><div class="flex-1"><p class="font-bold text-gray-800">${log.itemName}</p><p class="text-sm text-gray-500 mt-1">${t('by')} <strong class="text-gray-700">${log.departmentHead || 'N/A'}</strong></p><p class="text-sm text-gray-500">${t('loc')} <strong class="text-gray-700">${log.location || 'N/A'}</strong></p></div><div class="text-right ml-4 flex-shrink-0"><div class="flex items-center justify-end gap-2 font-semibold ${isOutbound ? 'text-orange-600' : 'text-green-600'}">${icon}<span>x ${log.quantity}</span></div><p class="text-xs text-gray-400 mt-1">${formatTimestamp(log.timestamp)}</p></div></div>${imgHTML}${adminDelete}`;
-            return el;
-        };
-        
-        function createRequestCard(req) {
-            const el = document.createElement('div');
-            el.className = 'p-4 rounded-lg shadow-sm bg-white border-l-4 border-blue-400 log-card';
-            const getStatusBadgeHTML = (status) => {
-                const statusMap = { 'new': { key: 'status_new', bg: 'bg-red-100 text-red-800', dot: 'bg-red-500' }, 'processing': { key: 'status_processing', bg: 'bg-yellow-100 text-yellow-800', dot: 'bg-yellow-500' }, 'completed': { key: 'status_completed', bg: 'bg-green-100 text-green-800', dot: 'bg-green-500' } };
-                const s = statusMap[status] || {text: status, bg: 'bg-gray-100 text-gray-800', dot: 'bg-gray-500'};
-                return `<span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${s.bg}"><span class="w-2 h-2 mr-2 rounded-full ${s.dot}"></span>${t(s.key)}</span>`;
-            }
-            const getAdminControlsHTML = (id, req) => {
-                if (!isAdmin) return '';
-                const deleteBtn = `<button data-id="${id}" data-type="request" class="delete-btn text-gray-400 hover:text-red-600 transition-colors"><span class="material-icons-outlined">delete</span></button>`;
-                if (req.status === 'new') return `<div class="mt-3 pt-3 border-t border-gray-200 flex justify-between items-center"><button data-id="${id}" data-action="process" class="process-btn btn btn-primary text-sm py-1 px-3">${t('process')}</button>${deleteBtn}</div>`;
-                if (req.status === 'processing') return `<div class="mt-3 pt-3 border-t border-gray-200 space-y-2"><div class="flex items-center gap-2 flex-wrap"><label class="text-xs font-medium whitespace-nowrap">${t('eta_label')}</label><input type="date" data-id="${id}" value="${req.arrivalDate || ''}" class="arrival-date-input p-1 border rounded text-sm w-full sm:w-auto form-input"><button data-id="${id}" data-action="complete" class="complete-btn btn btn-green text-sm py-1 px-3">${t('complete')}</button></div><div class="text-right">${deleteBtn}</div></div>`;
-                return `<div class="mt-3 pt-3 border-t border-gray-200 text-right">${deleteBtn}</div>`;
-            };
-            const imgHTML = req.imageDataURL ? `<div class="mt-3"><img src="${req.imageDataURL}" class="image-thumbnail" alt="Material Image"></div>` : '';
-            const etaHTML = req.status !== 'new' && req.arrivalDate ? `<p class="text-green-600 font-semibold text-sm">${t('eta_label')} ${req.arrivalDate}</p>` : '';
-            el.innerHTML = `<div class="flex justify-between items-start"><div class="flex-1"><p class="font-bold text-gray-800">${req.materialName}</p><p class="text-sm text-gray-500 mt-1">${t('by')} <strong class="text-gray-700">${req.personInCharge}</strong> | ${t('qty')} <strong class="text-gray-700">${req.quantity}</strong></p><p class="text-sm text-gray-500">${t('for')} <strong class="text-gray-700">${req.purpose}</strong></p></div><div class="text-right ml-4 flex-shrink-0">${getStatusBadgeHTML(req.status)}<p class="text-xs text-gray-400 mt-1">${formatTimestamp(req.timestamp)}</p></div></div><div class="mt-3 pt-3 border-t border-gray-100 text-sm space-y-1"><p><strong>${t('to')}</strong> ${req.deliveryAddress}</p><p><strong>${t('date_needed_label')}</strong> ${req.dateNeeded || 'N/A'}</p>${etaHTML}</div>${imgHTML}${getAdminControlsHTML(req.id, req)}`;
-            return el;
-        };
-
-        const langSwitcher = document.getElementById('language-switcher');
-        langSwitcher.innerHTML = `<button data-lang="en">EN</button><button data-lang="zh">中文</button><button data-lang="ta">தமிழ்</button>`;
-        langSwitcher.addEventListener('click', (e) => { if (e.target.tagName === 'BUTTON') setLanguage(e.target.dataset.lang); });
-        
-        document.addEventListener('click', async (e) => {
-            const appId = "inventory-tracker-app-dev";
-            const tabBtn = e.target.closest('.tab-btn');
-            if (tabBtn) {
-                const targetTab = tabBtn.dataset.tab;
-                if (targetTab === 'admin') {
-                    if(isAdmin) {
-                        isAdmin = false;
-                        showNotification('notify_admin_logout');
-                        renderAll();
-                    } else {
-                        document.getElementById('password-title').textContent = t('password_title');
-                        document.getElementById('password-error').textContent = t('password_error');
-                        document.getElementById('password-cancel').textContent = t('cancel');
-                        document.getElementById('password-submit').textContent = t('confirm');
-                        document.getElementById('password-input').value = "";
-                        document.getElementById('password-error').classList.add('hidden');
-                        showModal('password-modal');
-                        document.getElementById('password-input').focus();
-                    }
-                } else {
-                    currentTab = targetTab;
-                    renderAll();
-                }
-            }
-
-            if (e.target.id === 'password-submit') {
-                if (document.getElementById('password-input').value === 'aepl888') {
-                    hideModal('password-modal');
-                    isAdmin = true;
-                    showNotification('notify_admin_login');
-                    currentTab = 'admin';
-                    renderAll();
-                } else { document.getElementById('password-error').classList.remove('hidden'); }
-            }
-            if (e.target.id === 'password-cancel') { hideModal('password-modal'); }
-
-            const submitBtn = e.target.closest('button[type="submit"]');
-            if(submitBtn) {
-                e.preventDefault();
-                const form = submitBtn.closest('form');
-                if (!form.checkValidity()) {
-                    form.reportValidity();
-                    return;
-                }
-
-                const loader = submitBtn.querySelector('.loader');
-                loader.classList.remove('hidden');
-                submitBtn.disabled = true;
-                
-                if (form.id === 'inventory-form') {
-                    try {
-                        const logData = { type: form.querySelector('[name="action_type"]:checked').value, itemName: form.querySelector('#item-name').value, quantity: parseInt(form.querySelector('#quantity').value, 10) || 0, departmentHead: form.querySelector('#department-head').value, location: form.querySelector('#location').value, timestamp: serverTimestamp(), submitterId: userId };
-                        const preview = form.querySelector('#logging-photo-preview');
-                        if (preview.src && preview.src.startsWith('data:image')) { logData.imageDataURL = await resizeImage(preview.src); }
-                        await addDoc(collection(db, `artifacts/${appId}/public/data/inventory_logs`), logData);
-                        showNotification('notify_record_submitted');
-                        form.reset();
-                        const loggingPhotoPreview = form.querySelector('#logging-photo-preview');
-                        if (loggingPhotoPreview) {
-                            loggingPhotoPreview.classList.add('hidden');
-                            loggingPhotoPreview.src = "";
-                        }
-                        const loggingPhotoLabel = form.querySelector('#logging-photo-label');
-                        if(loggingPhotoLabel) loggingPhotoLabel.textContent = t('upload_image');
-
-                    } catch (error) {
-                        console.error("Log submission failed:", error);
-                        showNotification('notify_submission_failed');
-                    } finally {
-                        loader.classList.add('hidden');
-                        submitBtn.disabled = false;
-                    }
-                } else if (form.id === 'material-request-form') {
-                    try {
-                        const requestData = { personInCharge: form.querySelector('#request-person-in-charge').value, purpose: form.querySelector('#request-purpose').value, materialName: form.querySelector('#request-material-name').value, quantity: parseInt(form.querySelector('#request-quantity').value, 10) || 0, dateNeeded: form.querySelector('#request-date-needed').value, deliveryAddress: form.querySelector('#request-delivery-address').value, status: 'new', timestamp: serverTimestamp(), submitterId: userId };
-                        const preview = form.querySelector('#request-photo-preview');
-                        if (preview.src && preview.src.startsWith('data:image')) { requestData.imageDataURL = await resizeImage(preview.src); }
-                        await addDoc(collection(db, `artifacts/${appId}/public/data/material_requests`), requestData);
-                        showNotification('notify_request_submitted');
-                        form.reset();
-                        const requestPhotoPreview = form.querySelector('#request-photo-preview');
-                        if (requestPhotoPreview) {
-                           requestPhotoPreview.classList.add('hidden');
-                           requestPhotoPreview.src = "";
-                        }
-                        const requestPhotoLabel = form.querySelector('#request-photo-label');
-                        if(requestPhotoLabel) requestPhotoLabel.textContent = t('upload_image');
-
-                    } catch (error) {
-                        console.error("Request submission failed:", error);
-                        showNotification('notify_submission_failed');
-                    } finally {
-                        loader.classList.add('hidden');
-                        submitBtn.disabled = false;
-                    }
-                }
-            }
-
-            if (e.target.closest('.delete-btn')) {
-                const btn = e.target.closest('.delete-btn');
-                const { id, type } = btn.dataset;
-                document.getElementById('delete-confirm-message').textContent = t('delete_confirm_msg');
-                document.getElementById('delete-cancel-btn').textContent = t('cancel');
-                document.getElementById('delete-confirm-btn').textContent = t('delete');
-                const modal = document.getElementById('delete-confirm-modal');
-                modal.dataset.docId = id; modal.dataset.type = type;
-                showModal('delete-confirm-modal');
-            }
-            if (e.target.id === 'delete-confirm-btn') {
-                const modal = document.getElementById('delete-confirm-modal');
-                const { docId, type } = modal.dataset;
-                const collectionName = type === 'log' ? 'inventory_logs' : 'material_requests';
-                try {
-                    await deleteDoc(doc(db, `artifacts/${appId}/public/data/${collectionName}`, docId));
-                    showNotification('notify_item_deleted');
-                } catch(err) { console.error("Deletion failed: ", err); showNotification('notify_delete_failed'); }
-                hideModal('delete-confirm-modal');
-            }
-            if (e.target.id === 'delete-cancel-btn') { hideModal('delete-confirm-modal'); }
-
-            if (e.target.classList.contains('image-thumbnail')) {
-                document.getElementById('lightbox-image').src = e.target.src;
-                showModal('image-lightbox-modal');
-            }
-
-            const adminActionBtn = e.target.closest('.process-btn, .complete-btn');
-            if (adminActionBtn) {
-                const { id, action } = adminActionBtn.dataset;
-                const docRef = doc(db, `artifacts/${appId}/public/data/material_requests`, id);
-                try {
-                    if (action === 'process') await updateDoc(docRef, { status: 'processing' });
-                    else if (action === 'complete') await updateDoc(docRef, { status: 'completed' });
-                } catch(err) { console.error("Update failed: ", err); showNotification('notify_update_failed'); }
-            }
-        });
-
-        document.addEventListener('change', async (e) => {
-            if (e.target.classList.contains('arrival-date-input')) {
-                try {
-                     const appId = "inventory-tracker-app-dev";
-                     await updateDoc(doc(db, `artifacts/${appId}/public/data/material_requests`, e.target.dataset.id), { arrivalDate: e.target.value });
-                } catch(err) { console.error("ETA update failed: ", err); showNotification('notify_eta_update_failed'); }
-            }
-
-            const photoInputId = e.target.id;
-            if (photoInputId === 'request-item-photo' || photoInputId === 'logging-item-photo') {
-                const previewId = photoInputId.replace('item-photo', 'photo-preview');
-                const labelId = photoInputId.replace('item-photo', 'photo-label');
-                const file = e.target.files[0];
-                if (file) {
-                    const reader = new FileReader();
-                    reader.onload = re => {
-                        const previewEl = document.getElementById(previewId);
-                        if(previewEl) {
-                           previewEl.src = re.target.result;
-                           previewEl.classList.remove('hidden');
-                        }
-                    };
-                    reader.readAsDataURL(file);
-                    const labelEl = document.getElementById(labelId);
-                    if(labelEl) {
-                       labelEl.textContent = file.name.length > 20 ? `${file.name.substring(0, 17)}...` : file.name;
-                    }
-                }
-            }
-        });
-        
-        setLanguage(currentLanguage);
-        renderAll();
-    </script>
+function sortedReports(){ return [...reports].sort((a,b)=>new Date(b.timestamp||0)-new Date(a.timestamp||0)); }
+function renderLogs(){ const rows=sortedReports(); view.innerHTML=`<div class="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"><div><h2 class="text-xl font-bold">Service Report Log</h2><p class="text-sm text-slate-500">Shared submission status for technicians and administrators.</p></div><button id="refreshLog" class="btn bg-slate-200 text-slate-700">Refresh</button></div><div id="logList" class="space-y-3"></div>`; document.getElementById("refreshLog").onclick=()=>{reports=loadReports();renderLogs();}; const list=document.getElementById("logList"); if(!rows.length){list.innerHTML=`<div class="py-16 text-center font-semibold text-slate-400">No submitted service reports</div>`;return;} rows.forEach(r=>list.appendChild(reportCard(r,false))); }
+function reportCard(r,admin){
+  const el=document.createElement("article");
+  const status=normalizeStatus(r.status);
+  el.className="card border-l-4 border-l-blue-500 p-4";
+  el.innerHTML=`<div class="flex flex-col gap-3 sm:flex-row sm:justify-between"><div><h3 class="font-bold text-slate-800">${escapeHtml(r.reportNo||"Service Report")}</h3><p class="text-sm text-slate-600">${escapeHtml(r.client||"")} Â· ${escapeHtml(r.technician||"")}</p><p class="text-xs text-slate-400">Submitted ${formatTime(r.timestamp)}</p></div><div class="sm:text-right"><span class="badge ${statusClass(status)}">${statusLabel(status)}</span><div class="mt-3 flex flex-wrap gap-2 sm:justify-end"><button class="printPdf btn bg-slate-200 px-3 py-2 text-slate-700" type="button">Print</button><button class="downloadPdf btn btn-primary px-3 py-2" type="button">Download PDF</button></div></div></div>${admin?adminPanel(r):""}`;
+  el.querySelector(".downloadPdf").onclick=()=>downloadReportPdf(r);
+  el.querySelector(".printPdf").onclick=()=>printReport(r);
+  if(admin){el.querySelector(".saveAdmin").onclick=()=>saveAdmin(r.id,el);el.querySelector(".deleteReport").onclick=()=>deleteReport(r);}
+  return el;
+}
+function renderAdmin(){ const rows=sortedReports(); view.innerHTML=`<div class="mb-4"><h2 class="text-xl font-bold">Service Report Administration</h2><p class="text-sm text-slate-500">Download, print, email and update processing status.</p></div><div id="adminList" class="space-y-3"></div>`; const list=document.getElementById("adminList"); if(!rows.length){list.innerHTML=`<div class="py-16 text-center font-semibold text-slate-400">No reports</div>`;return;} rows.forEach(r=>list.appendChild(reportCard(r,true))); }
+function adminPanel(r){ return `<div class="mt-4 grid gap-3 border-t pt-4 md:grid-cols-2"><label class="text-sm font-semibold text-slate-600">ERP Reference<input class="erp field mt-1" value="${escapeAttr(r.erpReference||"")}"></label><label class="text-sm font-semibold text-slate-600">Status<select class="status field mt-1"><option value="submitted" ${r.status==="submitted"?'selected':''}>Submitted</option><option value="processing" ${r.status==="processing"?'selected':''}>Processing</option><option value="erp_recorded" ${r.status==="erp_recorded"?'selected':''}>ERP Recorded</option><option value="sent" ${r.status==="sent"?'selected':''}>Sent to Customer</option><option value="completed" ${r.status==="completed"?'selected':''}>Completed</option></select></label><label class="text-sm font-semibold text-slate-600 md:col-span-2">Admin Remark<textarea class="remark field mt-1" rows="2">${escapeHtml(r.adminRemark||"")}</textarea></label><div class="flex flex-wrap gap-2 md:col-span-2"><button class="saveAdmin btn btn-green">Save Admin Update</button><a class="btn bg-slate-200 text-slate-700" href="mailto:${encodeURIComponent(r.customerEmail||'')}?subject=${encodeURIComponent('Service Report '+(r.reportNo||''))}&body=${encodeURIComponent('Dear Customer,\n\nPlease find attached service report '+(r.reportNo||'')+'.\n\nRegards,\nAirnovation Engineering Pte Ltd')}">Open Email</a><button class="deleteReport btn btn-red">Delete</button></div></div>`; }
+async function saveAdmin(id,el){
+  const record=reports.find(x=>x.id===id);
+  if(!record){showNotice("Record not found.");return;}
+  record.erpReference=el.querySelector(".erp").value.trim();
+  record.status=el.querySelector(".status").value;
+  record.adminRemark=el.querySelector(".remark").value.trim();
+  record.statusUpdatedBy="Local Test Admin";
+  record.statusUpdatedAt=new Date().toISOString();
+  saveReports(); render(); showNotice("Admin update saved locally.");
+}
+async function deleteReport(r){
+  if(!confirm(`Delete ${r.reportNo}? This cannot be undone.`))return;
+  reports=reports.filter(x=>x.id!==r.id); saveReports(); render();
+}
+function normalizeStatus(s){return s||"submitted";} function statusLabel(s){return({submitted:"Submitted",processing:"Processing",erp_recorded:"ERP Recorded",sent:"Sent to Customer",completed:"Completed"})[normalizeStatus(s)]||"Submitted";} function statusClass(s){return({submitted:"bg-red-100 text-red-700",processing:"bg-blue-100 text-blue-700",erp_recorded:"bg-amber-100 text-amber-700",sent:"bg-purple-100 text-purple-700",completed:"bg-emerald-100 text-emerald-700"})[normalizeStatus(s)]||"bg-red-100 text-red-700";}
+function setLoading(button,on){button.disabled=on;button.querySelector(".loader")?.classList.toggle("hidden",!on);} function formatTime(ts){if(!ts)return "Just now"; if(ts?.toDate)return ts.toDate().toLocaleString(); const d=new Date(ts); return Number.isNaN(d.getTime())?"Just now":d.toLocaleString();} function formatError(e){return [e?.code,e?.message].filter(Boolean).join(": ")||"Unknown error";} function escapeHtml(v){return String(v??"").replaceAll("&","&amp;").replaceAll("<","&lt;").replaceAll(">","&gt;").replaceAll('"',"&quot;").replaceAll("'","&#039;");} function escapeAttr(v){return escapeHtml(v);}
+function showNotice(message){document.getElementById("notice-text").textContent=message;document.getElementById("notice").classList.remove("hidden");document.getElementById("notice").classList.add("flex");} window.closeNotice=()=>{document.getElementById("notice").classList.add("hidden");document.getElementById("notice").classList.remove("flex");};
+render();
+</script>
 </body>
 </html>
+
