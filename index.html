@@ -5,6 +5,12 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Airnovation Service Report</title>
   <meta name="theme-color" content="#f4f7fb" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-title" content="Service Report" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+  <link rel="manifest" href="./manifest.webmanifest" />
+  <link rel="icon" type="image/png" sizes="32x32" href="./icons/favicon-32-v1.png" />
+  <link rel="apple-touch-icon" href="./icons/apple-touch-icon-v1.png" />
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -268,6 +274,11 @@ const STATUS_LABELS={submitted:"Submitted",quotation_required:"Quotation Require
 function normalizeStatus(s){return Object.hasOwn(STATUS_LABELS,s)?s:"submitted";} function statusLabel(s){return STATUS_LABELS[normalizeStatus(s)];} function statusClass(s){return({submitted:"bg-blue-100 text-blue-700",quotation_required:"bg-amber-100 text-amber-700",quotation_submitted:"bg-indigo-100 text-indigo-700",invoice_pending:"bg-orange-100 text-orange-700",invoice_issued:"bg-purple-100 text-purple-700",payment_received_closed:"bg-emerald-100 text-emerald-700",cancelled:"bg-red-100 text-red-700"})[normalizeStatus(s)];}
 function setLoading(button,on){button.disabled=on;button.querySelector(".loader")?.classList.toggle("hidden",!on);} function formatTime(ts){if(!ts)return "Just now"; if(ts?.toDate)return ts.toDate().toLocaleString(); const d=new Date(ts); return Number.isNaN(d.getTime())?"Just now":d.toLocaleString();} function formatError(e){return [e?.code,e?.message].filter(Boolean).join(": ")||"Unknown error";} function escapeHtml(v){return String(v??"").replaceAll("&","&amp;").replaceAll("<","&lt;").replaceAll(">","&gt;").replaceAll('"',"&quot;").replaceAll("'","&#039;");} function escapeAttr(v){return escapeHtml(v);}
 function showNotice(message){document.getElementById("notice-text").textContent=message;document.getElementById("notice").classList.remove("hidden");document.getElementById("notice").classList.add("flex");} window.closeNotice=()=>{document.getElementById("notice").classList.add("hidden");document.getElementById("notice").classList.remove("flex");};
+if ("serviceWorker" in navigator) {
+  window.addEventListener("load", () => {
+    navigator.serviceWorker.register("./sw.js").catch(err => console.warn("Service worker registration failed.", err));
+  });
+}
 </script>
 </body>
 </html>
