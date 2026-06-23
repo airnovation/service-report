@@ -51,6 +51,7 @@
     <div><h1 class="text-2xl md:text-4xl font-bold text-slate-800">Service Report</h1><p class="font-medium text-slate-500">Airnovation Engineering Pte Ltd · Secure shared workflow</p></div>
     <div id="auth-state" class="text-sm font-semibold text-slate-500"></div>
   </header>
+  <div id="sync-state" class="mb-4 hidden rounded-lg border px-4 py-3 text-sm font-semibold"></div>
   <section class="rounded-xl bg-white p-2 shadow-lg shadow-slate-200/70">
     <nav id="app-nav" class="hidden gap-1 rounded-lg bg-slate-100 p-1 sm:flex">
       <button class="tab active" data-tab="form">Service Form</button>
@@ -93,16 +94,21 @@ const ADMIN_NAMES={
 const STAFF_EMAILS=new Set(["aepl.airnovation@gmail.com"]);
 const MAX_REPORT_PHOTOS=5;
 const MAX_REPORT_PHOTO_BYTES=820000;
+const DRAFT_QUEUE_KEY="airnovation_service_report_pending_v1";
 const app=initializeApp(firebaseConfig), auth=getAuth(app), db=getFirestore(app);
 let currentTab="form", reports=[], adminAudits=[], signaturePad=null, userId=null, userEmail="", isAdmin=false, isOwner=false, unsubscribeReports=null, unsubscribeAudits=null, reportsSnapshotReady=false, notificationAudio=null;
 let selectedReportPhotos=[];
-const view=document.getElementById("view"), appNav=document.getElementById("app-nav"), authState=document.getElementById("auth-state"), adminTab=document.querySelector('[data-tab="admin"]'), auditTab=document.querySelector('[data-tab="audit"]');
+let syncInProgress=false;
+const view=document.getElementById("view"), appNav=document.getElementById("app-nav"), authState=document.getElementById("auth-state"), syncState=document.getElementById("sync-state"), adminTab=document.querySelector('[data-tab="admin"]'), auditTab=document.querySelector('[data-tab="audit"]');
 
 document.addEventListener("click",unlockNotificationSound,{once:true});
+window.addEventListener("online",()=>{updateSyncBanner();syncPendingDrafts();});
+window.addEventListener("offline",updateSyncBanner);
+updateSyncBanner();
 onAuthStateChanged(auth,async user=>{
   stopReportsSnapshot();
   if(!user){
-    userId=null;userEmail="";isAdmin=false;isOwner=false;reports=[];adminAudits=[];authState.textContent="";appNav.classList.add("hidden");adminTab.classList.add("hidden");auditTab.classList.add("hidden");renderLogin();return;
+    userId=null;userEmail="";isAdmin=false;isOwner=false;reports=[];adminAudits=[];authState.textContent="";appNav.classList.add("hidden");adminTab.classList.add("hidden");auditTab.classList.add("hidden");updateSyncBanner();renderLogin();return;
   }
   const email=(user.email||"").toLowerCase();
   if(!isAllowedUser(email)){await signOut(auth);showNotice("This account is not authorized to use the Service Report application.");return;}
@@ -111,13 +117,13 @@ onAuthStateChanged(auth,async user=>{
   document.getElementById("app-logout").onclick=logoutUser;
   appNav.classList.remove("hidden");appNav.classList.add("flex");adminTab.classList.toggle("hidden",!isAdmin);auditTab.classList.toggle("hidden",!isAdmin);
   if(!isAdmin&&["admin","audit"].includes(currentTab)) setTab("form");
-  startReportsSnapshot();render();
+  startReportsSnapshot();render();updateSyncBanner();syncPendingDrafts();
 });
 function isAllowedUser(email){return Object.hasOwn(ADMIN_NAMES,email)||STAFF_EMAILS.has(email);}
 function renderLogin(){view.innerHTML=`<form id="user-login" class="mx-auto max-w-sm space-y-4 py-10"><h2 class="text-xl font-bold text-slate-800">Service Report Login</h2><input id="user-email" type="email" required autocomplete="username" class="field" placeholder="Email"><input id="user-password" type="password" required autocomplete="current-password" class="field" placeholder="Password"><p id="user-login-error" class="hidden text-sm font-semibold text-red-600"></p><button class="btn btn-primary w-full" type="submit">Login</button></form>`;document.getElementById("user-login").onsubmit=userLogin;}
 async function userLogin(e){e.preventDefault();const error=document.getElementById("user-login-error");try{const email=document.getElementById("user-email").value.trim().toLowerCase();if(!isAllowedUser(email))throw new Error("This email is not authorized.");await signInWithEmailAndPassword(auth,email,document.getElementById("user-password").value);}catch(err){console.error(err);error.textContent="Login failed: "+formatError(err);error.classList.remove("hidden");}}
 async function logoutUser(){await signOut(auth).catch(err=>showNotice("Logout failed: "+formatError(err)));currentTab="form";document.querySelectorAll(".tab").forEach(b=>b.classList.toggle("active",b.dataset.tab==="form"));}
-function startReportsSnapshot(){reportsSnapshotReady=false;unsubscribeReports=onSnapshot(query(collection(db,REPORTS_PATH)),snap=>{if(reportsSnapshotReady&&isAdmin&&snap.docChanges().some(change=>change.type==="added")){playNotificationSound();showToast("New service report received.");}reportsSnapshotReady=true;reports=snap.docs.map(d=>({id:d.id,...d.data()}));render();},err=>showNotice("Cannot load service reports: "+formatError(err)));if(isAdmin){unsubscribeAudits=onSnapshot(query(collection(db,AUDIT_PATH)),snap=>{adminAudits=snap.docs.map(d=>({id:d.id,...d.data()}));if(currentTab==="audit")renderAudit();},err=>showNotice("Cannot load admin audit records: "+formatError(err)));}}
+function startReportsSnapshot(){reportsSnapshotReady=false;unsubscribeReports=onSnapshot(query(collection(db,REPORTS_PATH)),snap=>{if(reportsSnapshotReady&&isAdmin&&snap.docChanges().some(change=>change.type==="added")){playNotificationSound();showToast("New service report received.");}reportsSnapshotReady=true;reports=snap.docs.map(d=>({id:d.id,...d.data()}));render();syncPendingDrafts();},err=>showNotice("Cannot load service reports: "+formatError(err)));if(isAdmin){unsubscribeAudits=onSnapshot(query(collection(db,AUDIT_PATH)),snap=>{adminAudits=snap.docs.map(d=>({id:d.id,...d.data()}));if(currentTab==="audit")renderAudit();},err=>showNotice("Cannot load admin audit records: "+formatError(err)));}}
 function stopReportsSnapshot(){unsubscribeReports?.();unsubscribeAudits?.();unsubscribeReports=null;unsubscribeAudits=null;reportsSnapshotReady=false;adminAudits=[];}
 function unlockNotificationSound(){try{const AudioContext=window.AudioContext||window.webkitAudioContext;if(!AudioContext)return;notificationAudio||=new AudioContext();if(notificationAudio.state==="suspended")notificationAudio.resume();}catch(err){console.warn("Notification sound could not be enabled.",err);}}
 function playNotificationSound(){try{unlockNotificationSound();if(!notificationAudio||notificationAudio.state!=="running")return;const now=notificationAudio.currentTime;[880,1175].forEach((frequency,index)=>{const oscillator=notificationAudio.createOscillator(),gain=notificationAudio.createGain(),start=now+index*.12;oscillator.type="sine";oscillator.frequency.setValueAtTime(frequency,start);gain.gain.setValueAtTime(.0001,start);gain.gain.exponentialRampToValueAtTime(.18,start+.02);gain.gain.exponentialRampToValueAtTime(.0001,start+.18);oscillator.connect(gain).connect(notificationAudio.destination);oscillator.start(start);oscillator.stop(start+.2);});}catch(err){console.warn("Notification sound failed.",err);}}
@@ -161,6 +167,45 @@ function renderReportImages(r,extraClass=""){const images=getReportImages(r);if(
 window.clearServiceForm=()=>{document.getElementById("service-form")?.reset();window.resetSignature();selectedReportPhotos=[];renderPhotoPreview();document.getElementById("serviceDate").value=new Date().toISOString().slice(0,10);calculateTotals();};
 function initSignature(){ const canvas=document.getElementById("signature"), ctx=canvas.getContext("2d"); const resize=()=>{const old=canvas.toDataURL(); canvas.width=canvas.clientWidth*devicePixelRatio; canvas.height=canvas.clientHeight*devicePixelRatio; ctx.scale(devicePixelRatio,devicePixelRatio); ctx.lineWidth=2;ctx.lineCap="round";ctx.strokeStyle="#000080"; if(signaturePad?.hasInk){const img=new Image();img.onload=()=>ctx.drawImage(img,0,0,canvas.clientWidth,canvas.clientHeight);img.src=old;}}; let drawing=false,last=null,hasInk=false; resize(); const pos=e=>{const r=canvas.getBoundingClientRect(),p=e.touches?.[0]||e;return{x:p.clientX-r.left,y:p.clientY-r.top}}; const start=e=>{drawing=true;last=pos(e);}; const move=e=>{if(!drawing)return;e.preventDefault();const p=pos(e);ctx.beginPath();ctx.moveTo(last.x,last.y);ctx.lineTo(p.x,p.y);ctx.stroke();last=p;hasInk=true;signaturePad.hasInk=true;}; const stop=()=>drawing=false; ["mousedown","touchstart"].forEach(n=>canvas.addEventListener(n,start,{passive:false})); ["mousemove","touchmove"].forEach(n=>canvas.addEventListener(n,move,{passive:false})); ["mouseup","mouseout","touchend"].forEach(n=>canvas.addEventListener(n,stop)); signaturePad={hasInk:false,clear(){ctx.clearRect(0,0,canvas.width,canvas.height);this.hasInk=false;},data(){return canvas.toDataURL("image/png");}}; }
 window.resetSignature=()=>signaturePad?.clear();
+function collectDraftPayload(){
+  const reportImages=[...selectedReportPhotos];
+  validatePhotoPayload(reportImages);
+  return {
+    client:document.getElementById("clientName").value.trim(),
+    customerEmail:document.getElementById("customerEmail").value.trim(),
+    address:document.getElementById("address").value.trim(),
+    brand:document.getElementById("brand").value.trim(),
+    model:document.getElementById("model").value.trim(),
+    serialNo:document.getElementById("serialNo").value.trim(),
+    referenceNo:document.getElementById("referenceNo").value.trim(),
+    serviceDate:document.getElementById("serviceDate").value,
+    technician:document.getElementById("techName").value.trim(),
+    timeIn:document.getElementById("timeIn").value,
+    timeOut:document.getElementById("timeOut").value,
+    complaints:document.getElementById("complaints").value.trim(),
+    report:document.getElementById("reportText").value.trim(),
+    recommendation:document.getElementById("recommendation").value.trim(),
+    reportImages,
+    items:collectItems(),
+    totals:calculateTotals(),
+    customerName:document.getElementById("signName").value.trim(),
+    designation:document.getElementById("designation").value.trim(),
+    signatureData:signaturePad.data(),
+    status:"submitted",
+    pdfStatus:"on_demand",
+    submittedBy:userEmail,
+    submitterId:userId,
+    createdOfflineAt:new Date().toISOString()
+  };
+}
+function pendingDrafts(){try{return JSON.parse(localStorage.getItem(DRAFT_QUEUE_KEY)||"[]");}catch{return [];}}
+function savePendingDrafts(drafts){localStorage.setItem(DRAFT_QUEUE_KEY,JSON.stringify(drafts));updateSyncBanner();}
+function queuePendingDraft(payload){const drafts=pendingDrafts();const draft={id:`offline-${Date.now()}-${Math.random().toString(36).slice(2)}`,payload,createdAt:new Date().toISOString(),userEmail};drafts.push(draft);savePendingDrafts(drafts);return draft;}
+function removePendingDraft(id){savePendingDrafts(pendingDrafts().filter(d=>d.id!==id));}
+function updateSyncBanner(){const count=pendingDrafts().length,online=navigator.onLine!==false;if(!syncState)return;if(!count&&online){syncState.className="mb-4 hidden rounded-lg border px-4 py-3 text-sm font-semibold";syncState.textContent="";return;}syncState.className=`mb-4 rounded-lg border px-4 py-3 text-sm font-semibold ${online?"border-amber-200 bg-amber-50 text-amber-800":"border-red-200 bg-red-50 text-red-700"}`;syncState.textContent=online?(userEmail?`${count} report${count===1?"":"s"} pending sync. The app will upload automatically.`:`${count} report${count===1?"":"s"} saved offline on this device. Login to sync.`):`Offline mode. ${count} report${count===1?"":"s"} pending sync on this device.`;}
+function isNetworkLikeError(err){const text=formatError(err).toLowerCase();return !navigator.onLine||text.includes("network")||text.includes("offline")||text.includes("unavailable")||text.includes("deadline")||text.includes("failed to fetch");}
+async function submitDraftToFirebase(payload,sequenceOffset=0){if(!reportsSnapshotReady)throw new Error("Report list is still loading. Please try again in a few seconds.");const reportSequence=reports.length+sequenceOffset+1,reportNo=reportNumber(reportSequence);await addDoc(collection(db,REPORTS_PATH),{...payload,reportNo,reportSequence,timestamp:serverTimestamp()});return reportNo;}
+async function syncPendingDrafts(){if(syncInProgress||!userEmail||!reportsSnapshotReady||navigator.onLine===false)return;const drafts=pendingDrafts().filter(d=>!d.userEmail||d.userEmail===userEmail);if(!drafts.length){updateSyncBanner();return;}syncInProgress=true;updateSyncBanner();let synced=0;try{for(const draft of drafts){await submitDraftToFirebase({...draft.payload,offlineDraftId:draft.id,offlineCreatedAt:draft.createdAt,offlineSyncedBy:userEmail},synced);removePendingDraft(draft.id);synced++;}if(synced)showToast(`${synced} pending service report${synced===1?"":"s"} synced.`);}catch(err){console.warn("Pending sync failed.",err);showToast("Pending sync is waiting for a better connection.");}finally{syncInProgress=false;updateSyncBanner();}}
 async function submitReport(e){
   e.preventDefault();
   const form=e.currentTarget;
@@ -168,54 +213,22 @@ async function submitReport(e){
   if(!form.reportValidity()) return;
   if(!signaturePad?.hasInk){showNotice("Customer signature is required.");return;}
   setLoading(button,true);
+  let payload=null;
   try{
-    const items=collectItems();
-    const totals=calculateTotals();
-    const reportImages=[...selectedReportPhotos];
-    validatePhotoPayload(reportImages);
-    const client=document.getElementById("clientName").value.trim();
-    const serviceDate=document.getElementById("serviceDate").value;
-    const reportSequence=reports.length+1;
-    const tempNo=reportNumber(reportSequence);
-    const payload={
-      reportNo:tempNo,
-      reportSequence,
-      client,
-      customerEmail:document.getElementById("customerEmail").value.trim(),
-      address:document.getElementById("address").value.trim(),
-      brand:document.getElementById("brand").value.trim(),
-      model:document.getElementById("model").value.trim(),
-      serialNo:document.getElementById("serialNo").value.trim(),
-      referenceNo:document.getElementById("referenceNo").value.trim(),
-      serviceDate,
-      technician:document.getElementById("techName").value.trim(),
-      timeIn:document.getElementById("timeIn").value,
-      timeOut:document.getElementById("timeOut").value,
-      complaints:document.getElementById("complaints").value.trim(),
-      report:document.getElementById("reportText").value.trim(),
-      recommendation:document.getElementById("recommendation").value.trim(),
-      reportImages,
-      items,
-      totals,
-      customerName:document.getElementById("signName").value.trim(),
-      designation:document.getElementById("designation").value.trim(),
-      signatureData:signaturePad.data(),
-      status:"submitted",
-      pdfStatus:"on_demand",
-      submittedBy:userEmail,
-      submitterId:userId,
-      timestamp:serverTimestamp()
-    };
-    await addDoc(collection(db,REPORTS_PATH),payload);
-    form.reset();
-    signaturePad.clear();
-    selectedReportPhotos=[];
-    renderPhotoPreview();
-    showNotice(`Report ${tempNo} submitted successfully.\nIt is now visible in the shared Log.`);
+    payload=collectDraftPayload();
+    if(navigator.onLine===false){queuePendingDraft(payload);window.clearServiceForm();showNotice("Saved offline on this device.\nIt will sync automatically when the connection is back.");return;}
+    const reportNo=await submitDraftToFirebase(payload);
+    window.clearServiceForm();
+    showNotice(`Report ${reportNo} submitted successfully.\nIt is now visible in the shared Log.`);
     setTimeout(()=>setTab("logs"),500);
   }catch(err){
     console.error(err);
-    showNotice("Submission failed. The form has not been cleared.\n\n"+formatError(err));
+    if(payload&&isNetworkLikeError(err)){
+      try{queuePendingDraft(payload);window.clearServiceForm();showNotice("Connection problem detected.\nThe report has been saved offline on this device and will sync automatically.");}
+      catch(storageErr){showNotice("Submission failed and the offline copy could not be saved.\nPlease do not clear this form.\n\n"+formatError(storageErr));}
+    }else{
+      showNotice("Submission failed. The form has not been cleared.\n\n"+formatError(err));
+    }
   }finally{
     setLoading(button,false);
   }

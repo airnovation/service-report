@@ -1,4 +1,4 @@
-const CACHE_NAME = "airnovation-service-report-v3";
+const CACHE_NAME = "airnovation-service-report-v4";
 const APP_ASSETS = [
   "./",
   "./index.html",
@@ -9,10 +9,24 @@ const APP_ASSETS = [
   "./icons/icon-512-v1.png",
   "./assets/aepl-logo.png"
 ];
+const REMOTE_ASSETS = [
+  "https://cdn.tailwindcss.com",
+  "https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js",
+  "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js",
+  "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js",
+  "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js"
+];
 
 self.addEventListener("install", event => {
   event.waitUntil(
-    caches.open(CACHE_NAME).then(cache => cache.addAll(APP_ASSETS))
+    caches.open(CACHE_NAME).then(async cache => {
+      await cache.addAll(APP_ASSETS);
+      await Promise.allSettled(
+        REMOTE_ASSETS.map(url => fetch(url, { mode: "cors" }).then(response => {
+          if (response.ok) return cache.put(url, response);
+        }))
+      );
+    })
   );
   self.skipWaiting();
 });
@@ -31,9 +45,8 @@ self.addEventListener("fetch", event => {
   if (request.method !== "GET") return;
 
   const url = new URL(request.url);
-  if (url.origin !== self.location.origin) return;
 
-  if (request.mode === "navigate") {
+  if (url.origin === self.location.origin && request.mode === "navigate") {
     event.respondWith(
       fetch(request)
         .then(response => {
@@ -47,6 +60,12 @@ self.addEventListener("fetch", event => {
   }
 
   event.respondWith(
-    caches.match(request).then(cached => cached || fetch(request))
+    caches.match(request).then(cached => cached || fetch(request).then(response => {
+      if (request.method === "GET" && (url.origin === self.location.origin || REMOTE_ASSETS.includes(request.url))) {
+        const copy = response.clone();
+        caches.open(CACHE_NAME).then(cache => cache.put(request, copy));
+      }
+      return response;
+    }))
   );
 });
