@@ -175,9 +175,11 @@ async function submitReport(e){
     validatePhotoPayload(reportImages);
     const client=document.getElementById("clientName").value.trim();
     const serviceDate=document.getElementById("serviceDate").value;
-    const tempNo=`SR-${serviceDate.replaceAll("-","")}-${Date.now().toString().slice(-6)}`;
+    const reportSequence=reports.length+1;
+    const tempNo=reportNumber(reportSequence);
     const payload={
       reportNo:tempNo,
+      reportSequence,
       client,
       customerEmail:document.getElementById("customerEmail").value.trim(),
       address:document.getElementById("address").value.trim(),
@@ -257,6 +259,9 @@ function printReport(r){
 }
 
 function timestampMillis(value){if(value?.toMillis)return value.toMillis();const parsed=new Date(value||0).getTime();return Number.isNaN(parsed)?0:parsed;}
+function reportNumber(index){return `A-${String(index).padStart(4,"0")}`;}
+function nextReportNo(){return reportNumber(reports.length+1);}
+function reportsInNumberOrder(rows=reports){return [...rows].sort((a,b)=>timestampMillis(a.timestamp)-timestampMillis(b.timestamp)||String(a.id||"").localeCompare(String(b.id||"")));}
 function sortedReports(){return [...reports].sort((a,b)=>timestampMillis(b.timestamp)-timestampMillis(a.timestamp));}
 function renderLogs(){ const rows=sortedReports(); view.innerHTML=`<div class="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"><div><h2 class="text-xl font-bold">Service Report Log</h2><p class="text-sm text-slate-500">Live submission status for technicians and administrators.</p></div></div><div id="logList" class="space-y-3"></div>`; const list=document.getElementById("logList"); if(!rows.length){list.innerHTML=`<div class="py-16 text-center font-semibold text-slate-400">No submitted service reports</div>`;return;} rows.forEach(r=>list.appendChild(reportCard(r,false))); }
 function reportCard(r,admin){
@@ -288,7 +293,19 @@ async function saveAdmin(id,el){
 async function deleteReport(r){
   if(!isOwner){showNotice("Only the owner account can delete reports.");return;}
   if(!confirm(`Delete ${r.reportNo}? This cannot be undone.`))return;
-  try{const actorName=ADMIN_NAMES[userEmail]||userEmail,batch=writeBatch(db),auditRef=doc(collection(db,AUDIT_PATH));batch.set(auditRef,{reportId:r.id,reportNo:r.reportNo||"",action:"delete",summary:`Report deleted (last status: ${statusLabel(r.status)})`,previousStatus:normalizeStatus(r.status),actorName,actorEmail:userEmail,timestamp:serverTimestamp()});batch.delete(doc(db,REPORTS_PATH,r.id));await batch.commit();}catch(err){showNotice("Delete failed: "+formatError(err));}
+  try{
+    const actorName=ADMIN_NAMES[userEmail]||userEmail,remaining=reportsInNumberOrder(reports.filter(x=>x.id!==r.id)),auditRef=doc(collection(db,AUDIT_PATH));
+    let batch=writeBatch(db),ops=0;
+    batch.set(auditRef,{reportId:r.id,reportNo:r.reportNo||"",action:"delete",summary:`Report deleted (last status: ${statusLabel(r.status)}). Remaining reports renumbered.`,previousStatus:normalizeStatus(r.status),actorName,actorEmail:userEmail,timestamp:serverTimestamp()});ops++;
+    batch.delete(doc(db,REPORTS_PATH,r.id));ops++;
+    for(let i=0;i<remaining.length;i++){
+      const newNo=reportNumber(i+1),item=remaining[i];
+      if(item.reportNo===newNo&&item.reportSequence===i+1)continue;
+      batch.update(doc(db,REPORTS_PATH,item.id),{reportNo:newNo,reportSequence:i+1,renumberedBy:userEmail,renumberedAt:serverTimestamp()});ops++;
+      if(ops>=450){await batch.commit();batch=writeBatch(db);ops=0;}
+    }
+    if(ops)await batch.commit();
+  }catch(err){showNotice("Delete failed: "+formatError(err));}
 }
 async function clearAuditTrail(){if(!isOwner){showNotice("Only the owner account can clear audit history.");return;}if(!adminAudits.length){showNotice("There are no audit records to clear.");return;}if(!confirm(`Clear all ${adminAudits.length} Service Report audit records? This cannot be undone.`))return;try{for(let i=0;i<adminAudits.length;i+=450){const batch=writeBatch(db);adminAudits.slice(i,i+450).forEach(a=>batch.delete(doc(db,AUDIT_PATH,a.id)));await batch.commit();}showNotice("Service Report audit history cleared.");}catch(err){showNotice("Audit clear failed: "+formatError(err));}}
 const STATUS_LABELS={submitted:"Submitted",quotation_required:"Quotation Required",quotation_submitted:"Quotation Submitted",invoice_pending:"Invoice Pending",invoice_issued:"Invoice Issued",payment_received_closed:"Payment Received – Closed",cancelled:"Cancelled"};
