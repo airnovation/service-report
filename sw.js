@@ -1,4 +1,4 @@
-const CACHE_NAME = "airnovation-service-report-v9";
+const CACHE_NAME = "airnovation-service-report-v10";
 const APP_ASSETS = [
   "./",
   "./index.html",
